@@ -27,7 +27,7 @@ export function Settings({ indicators, onAdd, onUpdate, onDelete, onReset, onReo
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 350, tolerance: 5 } })
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } })
   );
 
   const handleEdit = (ind: Indicator) => {
@@ -272,7 +272,7 @@ function SortableIndicatorItem({
       style={style}
       className={`p-4 bg-white border border-slate-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${isDragging ? 'opacity-70' : ''}`}
     >
-      <div className="flex items-center gap-2 text-slate-400" {...attributes} {...listeners}>
+      <div className="flex items-center gap-2 text-slate-400 touch-none p-2" {...attributes} {...listeners}>
         <GripVertical size={18} />
       </div>
       {editingId === indicator.id ? (
@@ -353,17 +353,17 @@ function SortableIndicatorItem({
             </h3>
             <span className="text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full shrink-0 max-w-[6rem] truncate" title={indicator.unit}>{indicator.unit}</span>
 
-            <div className="flex flex-col sm:flex-row gap-2 sm:ml-2 mt-2 sm:mt-0">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 sm:ml-2 mt-2 sm:mt-0 w-full sm:w-auto">
               <button
                 onClick={() => onUpdate({ ...indicator, isActive: indicator.isActive === false ? true : false })}
-                className={`text-xs px-2 py-1 rounded-full border transition-colors w-full sm:w-auto ${indicator.isActive !== false ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'bg-slate-50 text-slate-400 border-slate-200'}`}
+                className={`text-xs px-2 py-1 rounded-full border transition-colors w-full ${indicator.isActive !== false ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'bg-slate-50 text-slate-400 border-slate-200'}`}
                 title="点击切换总开关"
               >
                 总开关 {indicator.isActive !== false ? '开' : '关'}
               </button>
               <button
                 onClick={() => onUpdate({ ...indicator, visibleInList: indicator.visibleInList === false ? true : false })}
-                className={`text-xs px-2 py-1 rounded-full border transition-colors w-full sm:w-auto ${indicator.visibleInList !== false ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-slate-50 text-slate-400 border-slate-200'}`}
+                className={`text-xs px-2 py-1 rounded-full border transition-colors w-full ${indicator.visibleInList !== false ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-slate-50 text-slate-400 border-slate-200'}`}
                 title="点击切换列表显示状态"
                 disabled={indicator.isActive === false}
                 style={{ opacity: indicator.isActive === false ? 0.5 : 1 }}
@@ -372,7 +372,7 @@ function SortableIndicatorItem({
               </button>
               <button
                 onClick={() => onUpdate({ ...indicator, visibleInChart: indicator.visibleInChart === false ? true : false })}
-                className={`text-xs px-2 py-1 rounded-full border transition-colors w-full sm:w-auto ${indicator.visibleInChart !== false ? 'bg-purple-50 text-purple-600 border-purple-200' : 'bg-slate-50 text-slate-400 border-slate-200'}`}
+                className={`text-xs px-2 py-1 rounded-full border transition-colors w-full ${indicator.visibleInChart !== false ? 'bg-purple-50 text-purple-600 border-purple-200' : 'bg-slate-50 text-slate-400 border-slate-200'}`}
                 title="点击切换图表显示状态"
                 disabled={indicator.isActive === false}
                 style={{ opacity: indicator.isActive === false ? 0.5 : 1 }}

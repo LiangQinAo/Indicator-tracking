@@ -449,7 +449,7 @@ export function AddRecord({ records, indicators, onAdd, onUpdate, onAddIndicator
                       <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
                     )}
 
-                    {(job.status === 'pending' || job.status === 'processing') && (
+                    {(job.status === 'pending' || job.status === 'processing' || job.status === 'error') && (
                       <button
                         className="p-2 text-slate-400 hover:text-red-500"
                         onClick={() => handleCancelJob(job.id)}
@@ -488,7 +488,7 @@ export function AddRecord({ records, indicators, onAdd, onUpdate, onAddIndicator
 
             <div className="space-y-4">
               <h3 className="text-sm font-medium text-slate-700 border-b border-slate-100 pb-2">指标数据</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-2 gap-4">
                 {listIndicators.map(ind => (
                   <div key={ind.id}>
                     <label
