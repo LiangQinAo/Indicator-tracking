@@ -559,6 +559,17 @@ async function startServer() {
     const stmt = db.prepare('SELECT * FROM ai_jobs WHERE id = ?');
     const row = stmt.get(req.params.id) as any;
     if (!row) return res.status(404).end();
+    if (!row.file_path || !fs.existsSync(row.file_path)) {
+      res.type('image/svg+xml');
+      return res.send(`
+        <svg xmlns="http://www.w3.org/2000/svg" width="480" height="320" viewBox="0 0 480 320">
+          <rect width="100%" height="100%" fill="#f1f5f9"/>
+          <rect x="24" y="24" width="432" height="272" rx="16" fill="#ffffff" stroke="#e2e8f0"/>
+          <text x="50%" y="48%" text-anchor="middle" font-size="16" fill="#64748b" font-family="Arial, sans-serif">文件已不存在</text>
+          <text x="50%" y="58%" text-anchor="middle" font-size="12" fill="#94a3b8" font-family="Arial, sans-serif">请重新上传或删除任务</text>
+        </svg>
+      `);
+    }
     if (row.mime) res.type(row.mime);
     res.sendFile(row.file_path);
   });
