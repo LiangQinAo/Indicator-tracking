@@ -644,6 +644,21 @@ async function startServer() {
       - 如果它能对应上预设列表中的某个指标，请提供该指标的 'matchedId'。
       - 如果它是预设列表中没有的新指标，请不要提供 'matchedId'，但必须提供它的 'name' (名称), 'unit' (单位), 以及参考范围的 'minNormal' 和 'maxNormal' (如果有的话)。名称和单位必须简短（不超过20个字符）。
       - 必须提供提取到的数值 'value'。
+
+      最终请**仅输出**严格 JSON（不要包含任何额外文字/解释/代码块），格式如下：
+      {
+        "checkDate": "YYYY-MM-DD",
+        "items": [
+          {
+            "matchedId": "预设指标ID（可选）",
+            "name": "指标名称",
+            "value": 0,
+            "unit": "单位（可选）",
+            "minNormal": 0,
+            "maxNormal": 0
+          }
+        ]
+      }
     `;
 
   const runGeminiRecognition = async (filePath: string, mimeType: string) => {
