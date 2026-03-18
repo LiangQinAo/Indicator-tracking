@@ -750,21 +750,31 @@ async function startServer() {
     }
 
     const tJsonStart = Date.now();
-    const data = await res.json().catch(() => null);
+    const rawText = await res.text().catch(() => '');
+    let data: any = null;
+    try {
+      data = rawText ? JSON.parse(rawText) : null;
+    } catch {
+      data = null;
+    }
     console.log(`${logPrefix} json_parse_ms=${Date.now() - tJsonStart}`);
     if (!res.ok || !data?.ok) {
       const message = data?.error || `CODEX_REQUEST_FAILED_${res.status}`;
       if (message === 'timeout') {
         throw new Error('TIMEOUT');
       }
+      if (message === 'invalid json response' || !data) {
+        const raw = data?.raw || rawText;
+        console.log(`${logPrefix} invalid_json raw=${String(raw || '').slice(0, 500)}`);
+      }
       console.log(`${logPrefix} api_error=${message}`);
-      throw new Error(message);
+      throw new Error(message === 'invalid json response' ? 'INVALID_JSON_RESPONSE' : message);
     }
 
     const payload = data.data || {};
     const items = Array.isArray(payload.items) ? payload.items : [];
     if (typeof payload.checkDate !== 'string' || items.length === 0) {
-      console.log(`${logPrefix} invalid_json raw=${String(data?.raw || '').slice(0, 500)}`);
+      console.log(`${logPrefix} invalid_json raw=${String(data?.raw || rawText || '').slice(0, 500)}`);
       throw new Error('INVALID_JSON_RESPONSE');
     }
     console.log(`${logPrefix} done total_ms=${Date.now() - t0}`);
