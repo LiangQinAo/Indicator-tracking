@@ -695,82 +695,54 @@ async function startServer() {
     if (!process.env.CODEX_API_KEY) {
       throw new Error('CODEX_API_KEY_MISSING');
     }
-    const baseUrl = process.env.CODEX_API_BASE_URL || 'https://api.openai.com/v1/responses';
-    const model = process.env.CODEX_MODEL || 'gpt-4o-mini';
-    const base64 = fs.readFileSync(filePath).toString('base64');
-    const dataUrl = `data:${mimeType || 'application/octet-stream'};base64,${base64}`;
+    const url = process.env.CODEX_API_BASE_URL || 'http://8.134.251.152:3200/vision/medical';
     const indicators = db.prepare('SELECT id, name FROM indicators').all() as { id: string; name: string }[];
     const prompt = buildAiPrompt(indicators);
 
-    const schema = {
-      type: 'object',
-      additionalProperties: false,
-      properties: {
-        date: { type: 'string', description: '检查日期，格式 YYYY-MM-DD' },
-        items: {
-          type: 'array',
-          items: {
-            type: 'object',
-            additionalProperties: false,
-            properties: {
-              matchedId: { type: 'string', description: '如果匹配到预设指标，填入对应的ID' },
-              name: { type: 'string', description: "指标名称（简短，如'白细胞'）" },
-              value: { type: 'number', description: '检测数值' },
-              unit: { type: 'string', description: "单位（简短，如'10^9/L'）" },
-              minNormal: { type: 'number', description: '正常范围下限' },
-              maxNormal: { type: 'number', description: '正常范围上限' }
-            },
-            required: ['name', 'value']
-          }
-        }
-      },
-      required: ['date', 'items']
-    };
+    const buffer = fs.readFileSync(filePath);
+    const blob = new Blob([buffer], { type: mimeType || 'application/octet-stream' });
+    const form = new FormData();
+    const filename = `upload${path.extname(filePath) || ''}`;
+    form.append('file', blob, filename);
+    form.append('indicators', JSON.stringify(indicators));
+    form.append('prompt', prompt);
+    form.append('timeoutMs', String(AI_TIMEOUT_MS));
 
-    const res = await fetch(baseUrl, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.CODEX_API_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model,
-        input: [
-          {
-            role: 'user',
-            content: [
-              { type: 'input_text', text: prompt },
-              { type: 'input_image', image_url: dataUrl }
-            ]
-          }
-        ],
-        text: {
-          format: {
-            type: 'json_schema',
-            name: 'lab_result',
-            strict: true,
-            schema
-          }
-        }
-      })
-    });
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), AI_TIMEOUT_MS + 5000);
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'x-auth-token': process.env.CODEX_API_KEY
+        },
+        body: form,
+        signal: controller.signal
+      });
+    } catch (error: any) {
+      if (error?.name === 'AbortError') {
+        throw new Error('TIMEOUT');
+      }
+      throw error;
+    } finally {
+      clearTimeout(timer);
+    }
 
-    const data = await res.json();
-    if (!res.ok) {
-      const message = data?.error?.message || data?.message || 'CODEX_REQUEST_FAILED';
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !data?.ok) {
+      const message = data?.error || `CODEX_REQUEST_FAILED_${res.status}`;
+      if (message === 'timeout') {
+        throw new Error('TIMEOUT');
+      }
       throw new Error(message);
     }
 
-    const outputText = data.output_text
-      || (Array.isArray(data.output)
-        ? data.output
-            .flatMap((item: any) => item?.content || [])
-            .filter((c: any) => c?.type === 'output_text')
-            .map((c: any) => c?.text || '')
-            .join('')
-        : '');
-
-    return JSON.parse(outputText || '{}');
+    const payload = data.data || {};
+    return {
+      date: payload.checkDate || payload.date || '',
+      items: Array.isArray(payload.items) ? payload.items : []
+    };
   };
 
   const runAiRecognition = async (filePath: string, mimeType: string) => {
@@ -865,7 +837,14 @@ async function startServer() {
         job.id
       );
     } catch (error: any) {
-      const message = error?.message === 'TIMEOUT' ? '识别超时' : (error?.message || '识别失败');
+      let message = error?.message || '识别失败';
+      if (message === 'TIMEOUT') {
+        message = '识别超时';
+      } else if (message === 'CODEX_API_KEY_MISSING') {
+        message = 'Codex Key 未配置';
+      } else if (message === 'GEMINI_API_KEY_MISSING') {
+        message = 'Gemini Key 未配置';
+      }
       const failed = attempt >= AI_MAX_ATTEMPTS;
       db.prepare('UPDATE ai_jobs SET status = ?, error = ?, updated_at = ? WHERE id = ?').run(
         failed ? 'error' : 'pending',
