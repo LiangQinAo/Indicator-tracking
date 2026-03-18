@@ -320,20 +320,14 @@ export function AddRecord({ records, indicators, onAdd, onUpdate, onAddIndicator
                     ))}
                   </div>
                 ) : (
-                  <div className="text-sm text-red-600">同日期已有记录，请确认是否覆盖。</div>
+                  <div className="text-sm text-red-600">同日期已有记录，已取消合并。</div>
                 )}
                 <div className="flex gap-2 mt-3">
                   <button
                     className="px-3 py-1.5 bg-red-600 text-white rounded-lg text-sm"
-                    onClick={() => { overwriteJobRecord(detailJob); setDetailJob(null); }}
+                    onClick={() => { handleCancelJob(detailJob.id); setDetailJob(null); }}
                   >
-                    覆盖保存
-                  </button>
-                  <button
-                    className="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-sm"
-                    onClick={() => { resolveJob(detailJob.id, 'ignored'); setDetailJob(null); }}
-                  >
-                    放弃保存
+                    删除任务
                   </button>
                 </div>
               </div>
@@ -535,26 +529,28 @@ export function AddRecord({ records, indicators, onAdd, onUpdate, onAddIndicator
                             </button>
                           )}
 
-                          {(job.status === 'error' || zeroItems) && (
+                          {(job.status === 'error' || zeroItems || job.status === 'conflict') && (
                             <div className="flex items-center gap-1">
-                              <button
-                                className="p-2 text-slate-400 hover:text-blue-600"
-                                onClick={() => handleRetryJob(job.id)}
-                                title="重试"
-                              >
-                                <RotateCw size={16} />
-                              </button>
+                              {(job.status === 'error' || zeroItems) && (
+                                <button
+                                  className="p-2 text-slate-400 hover:text-blue-600"
+                                  onClick={() => handleRetryJob(job.id)}
+                                  title="重试"
+                                >
+                                  <RotateCw size={16} />
+                                </button>
+                              )}
                               <button
                                 className="p-2 text-slate-400 hover:text-red-500"
                                 onClick={() => handleCancelJob(job.id)}
-                                title="删除任务"
+                                title={job.status === 'conflict' ? '删除冲突任务' : '删除任务'}
                               >
                                 <Trash2 size={16} />
                               </button>
                             </div>
                           )}
 
-                          {(job.status === 'success' || job.status === 'conflict') && !zeroItems && (
+                          {job.status === 'success' && !zeroItems && (
                             <button
                               className="px-2 py-1 text-xs rounded-lg border border-slate-200 text-slate-700 flex items-center gap-1"
                               onClick={() => setDetailJob(job)}
