@@ -46,8 +46,8 @@ export function RecordHistory({ records, indicators, onUpdate, onDelete }: Recor
     <div className="space-y-4 flex flex-col flex-1 min-h-0">
       <h2 className="text-xl font-bold text-slate-800 mb-6">历史记录</h2>
       
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden flex flex-col flex-1 min-h-0">
-        <div className="overflow-auto flex-1 min-h-0">
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-visible md:overflow-hidden flex flex-col flex-1 min-h-0">
+        <div className="overflow-visible md:overflow-auto md:flex-1 md:min-h-0">
           <table className="w-full text-sm text-left">
             <thead className="text-slate-600 font-medium border-b border-slate-200">
               <tr>
