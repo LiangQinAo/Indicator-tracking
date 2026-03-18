@@ -54,6 +54,8 @@ export function AddRecord({ records, indicators, onAdd, onUpdate, onAddIndicator
   const [detailJob, setDetailJob] = useState<AiJob | null>(null);
   const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [bulkSaving, setBulkSaving] = useState(false);
+  const [savedExpanded, setSavedExpanded] = useState(false);
 
   const listIndicators = indicators.filter(i => i.isActive !== false && i.visibleInList !== false);
 
@@ -198,6 +200,29 @@ export function AddRecord({ records, indicators, onAdd, onUpdate, onAddIndicator
       });
     }
     await resolveJob(job.id, 'saved');
+  };
+
+  const isZeroItemsJob = (job: AiJob) => {
+    return job.status === 'success' && (!job.result?.values || Object.keys(job.result.values).length === 0);
+  };
+
+  const handleBulkSave = async (savableJobs: AiJob[]) => {
+    if (savableJobs.length === 0) return;
+    setBulkSaving(true);
+    setUploadError(null);
+    try {
+      for (const job of savableJobs) {
+        try {
+          await saveJobRecord(job);
+          await new Promise(resolve => setTimeout(resolve, 120));
+        } catch (e) {
+          setUploadError('部分任务保存失败，请稍后重试');
+        }
+      }
+    } finally {
+      setBulkSaving(false);
+      loadJobs();
+    }
   };
 
   const overwriteJobRecord = async (job: AiJob) => {
@@ -432,97 +457,168 @@ export function AddRecord({ records, indicators, onAdd, onUpdate, onAddIndicator
             )}
 
             <div className="space-y-3">
-              {jobs.length === 0 && (
-                <div className="text-slate-500 text-sm">暂无识别任务</div>
-              )}
-              {jobs.map(job => {
-                const fileUrl = `/api/ai-jobs/${job.id}/file`;
-                const isPdf = job.mime?.includes('pdf');
-                const statusLabel = {
-                  pending: '等待处理',
-                  processing: '识别中',
-                  success: '可保存',
-                  conflict: '冲突待处理',
-                  error: '识别失败',
-                  saved: '已保存',
-                  ignored: '已忽略'
-                }[job.status];
+              {(() => {
+                const savedJobs = jobs.filter(job => job.status === 'saved');
+                const activeJobs = jobs.filter(job => job.status !== 'saved');
+                const savableJobs = activeJobs.filter(job => job.status === 'success' && !isZeroItemsJob(job));
+
                 return (
-                  <div key={job.id} className="flex items-center gap-3 p-3 border border-slate-100 rounded-xl bg-slate-50">
-                    {isPdf ? (
-                      <div className="w-14 h-14 bg-white border border-slate-200 rounded-lg flex items-center justify-center text-slate-500">
-                        <FileText size={20} />
-                      </div>
-                    ) : (
-                      <img
-                        src={fileUrl}
-                        alt="preview"
-                        className="w-14 h-14 object-cover rounded-lg border border-slate-200 cursor-pointer"
-                        onClick={() => setPreviewUrl(fileUrl)}
-                      />
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-slate-800">{job.date || '待识别日期'}</span>
-                        <span className={`text-xs px-2 py-0.5 rounded-full ${
-                          job.status === 'conflict' ? 'bg-red-50 text-red-600' :
-                          job.status === 'error' ? 'bg-rose-50 text-rose-600' :
-                          job.status === 'success' ? 'bg-emerald-50 text-emerald-600' :
-                          job.status === 'processing' ? 'bg-blue-50 text-blue-600' :
-                          job.status === 'saved' ? 'bg-slate-100 text-slate-500' :
-                          'bg-slate-100 text-slate-500'
-                        }`}>{statusLabel}</span>
-                      </div>
-                      <div className="text-xs text-slate-500 mt-1">
-                        {job.result?.values ? `识别 ${Object.keys(job.result.values).length} 项指标` : job.error || '等待处理...'}
-                      </div>
+                  <>
+                    <div className="flex items-center justify-between">
+                      <div className="text-sm font-medium text-slate-700">识别任务</div>
+                      <button
+                        className="px-3 py-1.5 text-xs rounded-lg bg-blue-600 text-white disabled:opacity-50"
+                        disabled={bulkSaving || savableJobs.length === 0}
+                        onClick={() => handleBulkSave(savableJobs)}
+                      >
+                        {bulkSaving ? '保存中...' : '全部保存'}
+                      </button>
                     </div>
 
-                    {job.status === 'processing' && (
-                      <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
+                    {activeJobs.length === 0 && (
+                      <div className="text-slate-500 text-sm">暂无识别任务</div>
                     )}
 
-                    {(job.status === 'pending' || job.status === 'processing') && (
+                    {activeJobs.map(job => {
+                      const fileUrl = `/api/ai-jobs/${job.id}/file`;
+                      const isPdf = job.mime?.includes('pdf');
+                      const zeroItems = isZeroItemsJob(job);
+                      const statusLabel = {
+                        pending: '等待处理',
+                        processing: '识别中',
+                        success: zeroItems ? '异常/0项' : '可保存',
+                        conflict: '冲突待处理',
+                        error: '识别失败',
+                        ignored: '已忽略'
+                      }[job.status];
+                      return (
+                        <div key={job.id} className="flex items-center gap-3 p-3 border border-slate-100 rounded-xl bg-slate-50">
+                          {isPdf ? (
+                            <div className="w-14 h-14 bg-white border border-slate-200 rounded-lg flex items-center justify-center text-slate-500">
+                              <FileText size={20} />
+                            </div>
+                          ) : (
+                            <img
+                              src={fileUrl}
+                              alt="preview"
+                              className="w-14 h-14 object-cover rounded-lg border border-slate-200 cursor-pointer"
+                              onClick={() => setPreviewUrl(fileUrl)}
+                            />
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-medium text-slate-800">{job.date || '待识别日期'}</span>
+                              <span className={`text-xs px-2 py-0.5 rounded-full ${
+                                job.status === 'conflict' ? 'bg-red-50 text-red-600' :
+                                job.status === 'error' || zeroItems ? 'bg-rose-50 text-rose-600' :
+                                job.status === 'success' ? 'bg-emerald-50 text-emerald-600' :
+                                job.status === 'processing' ? 'bg-blue-50 text-blue-600' :
+                                'bg-slate-100 text-slate-500'
+                              }`}>{statusLabel}</span>
+                            </div>
+                            <div className="text-xs text-slate-500 mt-1">
+                              {zeroItems ? '识别到 0 项指标（异常）' : job.result?.values ? `识别 ${Object.keys(job.result.values).length} 项指标` : job.error || '等待处理...'}
+                            </div>
+                          </div>
+
+                          {job.status === 'processing' && (
+                            <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
+                          )}
+
+                          {(job.status === 'pending' || job.status === 'processing') && (
+                            <button
+                              className="p-2 text-slate-400 hover:text-red-500"
+                              onClick={() => handleCancelJob(job.id)}
+                              title="取消任务"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          )}
+
+                          {(job.status === 'error' || zeroItems) && (
+                            <div className="flex items-center gap-1">
+                              <button
+                                className="p-2 text-slate-400 hover:text-blue-600"
+                                onClick={() => handleRetryJob(job.id)}
+                                title="重试"
+                              >
+                                <RotateCw size={16} />
+                              </button>
+                              <button
+                                className="p-2 text-slate-400 hover:text-red-500"
+                                onClick={() => handleCancelJob(job.id)}
+                                title="删除任务"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+                          )}
+
+                          {(job.status === 'success' || job.status === 'conflict') && !zeroItems && (
+                            <button
+                              className="px-2 py-1 text-xs rounded-lg border border-slate-200 text-slate-700 flex items-center gap-1"
+                              onClick={() => setDetailJob(job)}
+                            >
+                              <Info size={14} />
+                              详情
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+
+                    <div className="border-t border-slate-100 pt-2">
                       <button
-                        className="p-2 text-slate-400 hover:text-red-500"
-                        onClick={() => handleCancelJob(job.id)}
-                        title="取消任务"
+                        className="w-full flex items-center justify-between text-sm text-slate-600 hover:text-slate-800"
+                        onClick={() => setSavedExpanded(prev => !prev)}
                       >
-                        <Trash2 size={16} />
+                        <span>已保存（{savedJobs.length}）</span>
+                        <span>{savedExpanded ? '收起' : '展开'}</span>
                       </button>
-                    )}
-
-                    {job.status === 'error' && (
-                      <div className="flex items-center gap-1">
-                        <button
-                          className="p-2 text-slate-400 hover:text-blue-600"
-                          onClick={() => handleRetryJob(job.id)}
-                          title="重试"
-                        >
-                          <RotateCw size={16} />
-                        </button>
-                        <button
-                          className="p-2 text-slate-400 hover:text-red-500"
-                          onClick={() => handleCancelJob(job.id)}
-                          title="删除任务"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                    )}
-
-                    {(job.status === 'success' || job.status === 'conflict') && (
-                      <button
-                        className="px-2 py-1 text-xs rounded-lg border border-slate-200 text-slate-700 flex items-center gap-1"
-                        onClick={() => setDetailJob(job)}
-                      >
-                        <Info size={14} />
-                        详情
-                      </button>
-                    )}
-                  </div>
+                      {savedExpanded && savedJobs.length > 0 && (
+                        <div className="mt-3 space-y-2">
+                          {savedJobs.map(job => {
+                            const fileUrl = `/api/ai-jobs/${job.id}/file`;
+                            const isPdf = job.mime?.includes('pdf');
+                            return (
+                              <div key={job.id} className="flex items-center gap-3 p-3 border border-slate-100 rounded-xl bg-white">
+                                {isPdf ? (
+                                  <div className="w-12 h-12 bg-white border border-slate-200 rounded-lg flex items-center justify-center text-slate-500">
+                                    <FileText size={18} />
+                                  </div>
+                                ) : (
+                                  <img
+                                    src={fileUrl}
+                                    alt="preview"
+                                    className="w-12 h-12 object-cover rounded-lg border border-slate-200 cursor-pointer"
+                                    onClick={() => setPreviewUrl(fileUrl)}
+                                  />
+                                )}
+                                <div className="flex-1 min-w-0">
+                                  <div className="text-sm font-medium text-slate-700">{job.date || '已保存记录'}</div>
+                                  <div className="text-xs text-slate-500 mt-0.5">
+                                    {job.result?.values ? `识别 ${Object.keys(job.result.values).length} 项指标` : '已保存'}
+                                  </div>
+                                </div>
+                                <button
+                                  className="px-2 py-1 text-xs rounded-lg border border-slate-200 text-slate-700 flex items-center gap-1"
+                                  onClick={() => setDetailJob(job)}
+                                >
+                                  <Info size={14} />
+                                  详情
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                      {savedExpanded && savedJobs.length === 0 && (
+                        <div className="text-xs text-slate-400 mt-2">暂无已保存任务</div>
+                      )}
+                    </div>
+                  </>
                 );
-              })}
+              })()}
             </div>
           </div>
         ) : (
