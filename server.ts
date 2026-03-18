@@ -762,10 +762,15 @@ async function startServer() {
     }
 
     const payload = data.data || {};
+    const items = Array.isArray(payload.items) ? payload.items : [];
+    if (typeof payload.checkDate !== 'string' || items.length === 0) {
+      console.log(`${logPrefix} invalid_json raw=${String(data?.raw || '').slice(0, 500)}`);
+      throw new Error('INVALID_JSON_RESPONSE');
+    }
     console.log(`${logPrefix} done total_ms=${Date.now() - t0}`);
     return {
       date: payload.checkDate || payload.date || '',
-      items: Array.isArray(payload.items) ? payload.items : []
+      items
     };
   };
 
@@ -868,6 +873,8 @@ async function startServer() {
         message = 'Codex Key 未配置';
       } else if (message === 'GEMINI_API_KEY_MISSING') {
         message = 'Gemini Key 未配置';
+      } else if (message === 'INVALID_JSON_RESPONSE') {
+        message = 'invalid json response';
       }
       const failed = attempt >= AI_MAX_ATTEMPTS;
       db.prepare('UPDATE ai_jobs SET status = ?, error = ?, updated_at = ? WHERE id = ?').run(
