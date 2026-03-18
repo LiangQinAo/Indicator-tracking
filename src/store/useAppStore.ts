@@ -21,15 +21,6 @@ export function useAppStore() {
       if (indicatorsRes.ok) {
         const data = await indicatorsRes.json();
         if (data && data.length > 0) {
-          const priorityIds = ['wbc', 'hgb', 'neut', 'plt'];
-          data.sort((a: Indicator, b: Indicator) => {
-            const aIndex = priorityIds.indexOf(a.id);
-            const bIndex = priorityIds.indexOf(b.id);
-            if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex;
-            if (aIndex !== -1) return -1;
-            if (bIndex !== -1) return 1;
-            return 0;
-          });
           setIndicators(data);
         }
       }
@@ -123,6 +114,19 @@ export function useAppStore() {
     }
   }, [fetchData]);
 
+  const reorderIndicators = useCallback(async (ids: string[]) => {
+    try {
+      await fetch('/api/indicators/reorder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids })
+      });
+      setIndicators(prev => ids.map(id => prev.find(i => i.id === id)).filter(Boolean) as Indicator[]);
+    } catch (e) {
+      console.error('Failed to reorder indicators', e);
+    }
+  }, []);
+
   return {
     records,
     indicators,
@@ -134,5 +138,6 @@ export function useAppStore() {
     updateIndicator,
     deleteIndicator,
     resetIndicators,
+    reorderIndicators,
   };
 }

@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Indicator, MedicalRecord } from '../types';
 import { v4 as uuidv4 } from 'uuid';
 import { useDropzone } from 'react-dropzone';
-import { UploadCloud, Loader2, AlertCircle, X, FileText, Info } from 'lucide-react';
+import { UploadCloud, Loader2, AlertCircle, X, FileText, Info, Trash2 } from 'lucide-react';
 
 interface AddRecordProps {
   records: MedicalRecord[];
@@ -34,6 +34,13 @@ interface AiJob {
   original_name?: string | null;
 }
 
+interface PendingFile {
+  id: string;
+  file: File;
+  previewUrl?: string;
+  isPdf: boolean;
+}
+
 export function AddRecord({ records, indicators, onAdd, onUpdate, onAddIndicator }: AddRecordProps) {
   const [mode, setMode] = useState<'manual' | 'ai'>('manual');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
@@ -44,6 +51,8 @@ export function AddRecord({ records, indicators, onAdd, onUpdate, onAddIndicator
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [detailJob, setDetailJob] = useState<AiJob | null>(null);
+  const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
+  const [submitting, setSubmitting] = useState(false);
 
   const listIndicators = indicators.filter(i => i.isActive !== false && i.visibleInList !== false);
 
@@ -92,17 +101,13 @@ export function AddRecord({ records, indicators, onAdd, onUpdate, onAddIndicator
     setUploadError(null);
     setMode('ai');
 
-    for (const file of acceptedFiles) {
-      const form = new FormData();
-      form.append('file', file);
-      const res = await fetch('/api/ai-jobs', { method: 'POST', body: form });
-      if (!res.ok) {
-        setUploadError('上传失败，请稍后再试');
-        break;
-      }
-      await new Promise(resolve => setTimeout(resolve, 300));
-    }
-    loadJobs();
+    const newItems = acceptedFiles.map(file => ({
+      id: uuidv4(),
+      file,
+      previewUrl: file.type.includes('pdf') ? undefined : URL.createObjectURL(file),
+      isPdf: file.type.includes('pdf')
+    }));
+    setPendingFiles(prev => [...prev, ...newItems]);
   }, [loadJobs]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
@@ -117,6 +122,40 @@ export function AddRecord({ records, indicators, onAdd, onUpdate, onAddIndicator
       body: JSON.stringify({ status })
     });
     loadJobs();
+  };
+
+  const handleCancelJob = async (id: string) => {
+    await fetch(`/api/ai-jobs/${id}`, { method: 'DELETE' });
+    loadJobs();
+  };
+
+  const removePendingFile = (id: string) => {
+    setPendingFiles(prev => prev.filter(item => item.id !== id));
+  };
+
+  const submitPendingFiles = async () => {
+    if (pendingFiles.length === 0) {
+      setUploadError('请先选择文件');
+      return;
+    }
+    setSubmitting(true);
+    setUploadError(null);
+    try {
+      for (const item of pendingFiles) {
+        const form = new FormData();
+        form.append('file', item.file);
+        const res = await fetch('/api/ai-jobs', { method: 'POST', body: form });
+        if (!res.ok) {
+          setUploadError('上传失败，请稍后再试');
+          break;
+        }
+        await new Promise(resolve => setTimeout(resolve, 200));
+      }
+      setPendingFiles([]);
+      loadJobs();
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const saveJobRecord = async (job: AiJob) => {
@@ -303,6 +342,55 @@ export function AddRecord({ records, indicators, onAdd, onUpdate, onAddIndicator
               </div>
             </div>
 
+            {pendingFiles.length > 0 && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-medium text-slate-700">待上传队列 ({pendingFiles.length})</h3>
+                  <button
+                    className="text-sm text-red-500 hover:text-red-600"
+                    onClick={() => setPendingFiles([])}
+                  >
+                    清空
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  {pendingFiles.map(item => (
+                    <div key={item.id} className="flex items-center gap-3 p-3 border border-slate-100 rounded-xl bg-slate-50">
+                      {item.isPdf ? (
+                        <div className="w-12 h-12 bg-white border border-slate-200 rounded-lg flex items-center justify-center text-slate-500">
+                          <FileText size={18} />
+                        </div>
+                      ) : (
+                        <img
+                          src={item.previewUrl}
+                          alt="preview"
+                          className="w-12 h-12 object-cover rounded-lg border border-slate-200 cursor-pointer"
+                          onClick={() => setPreviewUrl(item.previewUrl || null)}
+                        />
+                      )}
+                      <div className="flex-1 min-w-0 text-sm text-slate-700 truncate">
+                        {item.file.name}
+                      </div>
+                      <button
+                        className="p-2 text-slate-400 hover:text-red-500"
+                        onClick={() => removePendingFile(item.id)}
+                        title="移除"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <button
+                  className="w-full py-2.5 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors disabled:opacity-50"
+                  onClick={submitPendingFiles}
+                  disabled={submitting}
+                >
+                  {submitting ? '提交中...' : '开始识别'}
+                </button>
+              </div>
+            )}
+
             {uploadError && (
               <div className="flex items-center gap-2 text-red-600 bg-red-50 p-3 rounded-xl text-sm">
                 <AlertCircle size={16} />
@@ -359,6 +447,16 @@ export function AddRecord({ records, indicators, onAdd, onUpdate, onAddIndicator
 
                     {job.status === 'processing' && (
                       <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
+                    )}
+
+                    {(job.status === 'pending' || job.status === 'processing') && (
+                      <button
+                        className="p-2 text-slate-400 hover:text-red-500"
+                        onClick={() => handleCancelJob(job.id)}
+                        title="取消任务"
+                      >
+                        <Trash2 size={16} />
+                      </button>
                     )}
 
                     {(job.status === 'success' || job.status === 'conflict') && (

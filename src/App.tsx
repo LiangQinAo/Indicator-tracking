@@ -19,7 +19,8 @@ export default function App() {
     addIndicator,
     updateIndicator,
     deleteIndicator,
-    resetIndicators
+    resetIndicators,
+    reorderIndicators
   } = useAppStore();
   
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -67,6 +68,7 @@ export default function App() {
           onUpdate={updateIndicator}
           onDelete={deleteIndicator}
           onReset={resetIndicators}
+          onReorder={reorderIndicators}
         />
       )}
       {activeTab === 'reports' && (

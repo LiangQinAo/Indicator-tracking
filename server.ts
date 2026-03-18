@@ -64,7 +64,8 @@ async function startServer() {
       isActive INTEGER DEFAULT 1,
       visibleInChart INTEGER DEFAULT 1,
       visibleInList INTEGER DEFAULT 1,
-      shortName TEXT
+      shortName TEXT,
+      sort_order INTEGER DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS report_types (
@@ -108,6 +109,13 @@ async function startServer() {
   try {
     db.exec('ALTER TABLE indicators ADD COLUMN shortName TEXT');
   } catch (e) { /* ignore if exists */ }
+  try {
+    db.exec('ALTER TABLE indicators ADD COLUMN sort_order INTEGER DEFAULT 0');
+  } catch (e) { /* ignore if exists */ }
+
+  try {
+    db.exec('UPDATE indicators SET sort_order = rowid WHERE sort_order IS NULL OR sort_order = 0');
+  } catch (e) { /* ignore */ }
 
   // Check if indicators table is empty, if so, seed it
   const countStmt = db.prepare('SELECT COUNT(*) as count FROM indicators');
@@ -149,16 +157,17 @@ async function startServer() {
       { id: "custom_1773759046914_g8yb3", name: "大血小板比值", unit: "", minNormal: 0.13, maxNormal: 0.43, color: "#f43f5e", isActive: false }
     ];
     
-    const stmt = db.prepare('INSERT INTO indicators (id, name, unit, minNormal, maxNormal, color, isActive, visibleInChart, visibleInList, shortName) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
-    for (const ind of defaultIndicators) {
+    const stmt = db.prepare('INSERT INTO indicators (id, name, unit, minNormal, maxNormal, color, isActive, visibleInChart, visibleInList, shortName, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+    defaultIndicators.forEach((ind, index) => {
       stmt.run(
         ind.id, ind.name, ind.unit || "", ind.minNormal ?? null, ind.maxNormal ?? null, ind.color, 
         ind.isActive === false ? 0 : 1, 
         (ind as any).visibleInChart === false ? 0 : 1,
         (ind as any).visibleInList === false ? 0 : 1,
-        ind.shortName || null
+        ind.shortName || null,
+        index + 1
       );
-    }
+    });
   }
 
   const reportTypeCountStmt = db.prepare('SELECT COUNT(*) as count FROM report_types');
@@ -213,7 +222,7 @@ async function startServer() {
 
   // --- Indicators ---
   app.get('/api/indicators', (req, res) => {
-    const stmt = db.prepare('SELECT * FROM indicators');
+    const stmt = db.prepare('SELECT * FROM indicators ORDER BY sort_order ASC');
     const rows = stmt.all() as any[];
     const indicators = rows.map(row => ({
       ...row,
@@ -226,8 +235,10 @@ async function startServer() {
 
   app.post('/api/indicators', (req, res) => {
     const { id, name, unit, minNormal, maxNormal, color, isActive, visibleInChart, visibleInList, shortName } = req.body;
-    const stmt = db.prepare('INSERT INTO indicators (id, name, unit, minNormal, maxNormal, color, isActive, visibleInChart, visibleInList, shortName) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
-    stmt.run(id, name, unit || "", minNormal ?? null, maxNormal ?? null, color, isActive === false ? 0 : 1, visibleInChart === false ? 0 : 1, visibleInList === false ? 0 : 1, shortName || null);
+    const maxOrderStmt = db.prepare('SELECT MAX(sort_order) as maxOrder FROM indicators');
+    const maxOrder = (maxOrderStmt.get() as { maxOrder: number | null }).maxOrder ?? 0;
+    const stmt = db.prepare('INSERT INTO indicators (id, name, unit, minNormal, maxNormal, color, isActive, visibleInChart, visibleInList, shortName, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+    stmt.run(id, name, unit || "", minNormal ?? null, maxNormal ?? null, color, isActive === false ? 0 : 1, visibleInChart === false ? 0 : 1, visibleInList === false ? 0 : 1, shortName || null, maxOrder + 1);
     res.json({ success: true });
   });
 
@@ -281,15 +292,35 @@ async function startServer() {
       { id: "custom_1773759019102_0568o", name: "大血小板比值", unit: "", minNormal: 0.13, maxNormal: 0.43, color: "#06b6d4", isActive: false },
       { id: "custom_1773759046914_g8yb3", name: "大血小板比值", unit: "", minNormal: 0.13, maxNormal: 0.43, color: "#f43f5e", isActive: false }
     ];
-    const stmt = db.prepare('INSERT INTO indicators (id, name, unit, minNormal, maxNormal, color, isActive, visibleInChart, visibleInList, shortName) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
-    for (const ind of defaultIndicators) {
+    const stmt = db.prepare('INSERT INTO indicators (id, name, unit, minNormal, maxNormal, color, isActive, visibleInChart, visibleInList, shortName, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+    defaultIndicators.forEach((ind, index) => {
       stmt.run(
         ind.id, ind.name, ind.unit || "", ind.minNormal ?? null, ind.maxNormal ?? null, ind.color, 
         ind.isActive === false ? 0 : 1, 
         (ind as any).visibleInChart === false ? 0 : 1,
         (ind as any).visibleInList === false ? 0 : 1,
-        ind.shortName || null
+        ind.shortName || null,
+        index + 1
       );
+    });
+    res.json({ success: true });
+  });
+
+  app.post('/api/indicators/reorder', (req, res) => {
+    const { ids } = req.body as { ids?: string[] };
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ error: 'ids required' });
+    }
+    const update = db.prepare('UPDATE indicators SET sort_order = ? WHERE id = ?');
+    db.exec('BEGIN');
+    try {
+      ids.forEach((id, index) => {
+        update.run(index + 1, id);
+      });
+      db.exec('COMMIT');
+    } catch (e) {
+      db.exec('ROLLBACK');
+      return res.status(500).json({ error: 'reorder failed' });
     }
     res.json({ success: true });
   });
@@ -364,6 +395,7 @@ async function startServer() {
     if (!file) return res.status(400).json({ error: 'file is required' });
     if (!typeId) return res.status(400).json({ error: 'typeId is required' });
 
+    const originalName = Buffer.from(file.originalname || '', 'latin1').toString('utf8');
     const id = randomUUID();
     db.prepare(
       'INSERT INTO report_files (id, type_id, date, title, file_path, original_name, mime, size, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
@@ -371,9 +403,9 @@ async function startServer() {
       id,
       typeId,
       date || null,
-      title || file.originalname,
+      title || originalName || file.originalname,
       file.path,
-      file.originalname,
+      originalName || file.originalname,
       file.mimetype,
       file.size,
       new Date().toISOString()
@@ -402,12 +434,24 @@ async function startServer() {
     res.json({ success: true });
   });
 
+  app.put('/api/report-files/:id', (req, res) => {
+    const { typeId, date, title } = req.body as { typeId?: string; date?: string; title?: string };
+    db.prepare('UPDATE report_files SET type_id = ?, date = ?, title = ? WHERE id = ?').run(
+      typeId,
+      date || null,
+      title || null,
+      req.params.id
+    );
+    res.json({ success: true });
+  });
+
   // --- AI Jobs ---
   app.post('/api/ai-jobs', uploadAi.single('file'), (req, res) => {
     const file = req.file;
     if (!file) return res.status(400).json({ error: 'file is required' });
     const id = randomUUID();
     const now = new Date().toISOString();
+    const originalName = Buffer.from(file.originalname || '', 'latin1').toString('utf8');
     db.prepare(
       'INSERT INTO ai_jobs (id, status, attempts, file_path, original_name, mime, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
     ).run(
@@ -415,7 +459,7 @@ async function startServer() {
       'pending',
       0,
       file.path,
-      file.originalname,
+      originalName || file.originalname,
       file.mimetype,
       now,
       now
@@ -463,6 +507,19 @@ async function startServer() {
       new Date().toISOString(),
       req.params.id
     );
+    res.json({ success: true });
+  });
+
+  app.delete('/api/ai-jobs/:id', (req, res) => {
+    const stmt = db.prepare('SELECT * FROM ai_jobs WHERE id = ?');
+    const row = stmt.get(req.params.id) as any;
+    if (!row) return res.status(404).end();
+    try {
+      fs.unlinkSync(row.file_path);
+    } catch (e) {
+      // ignore missing file
+    }
+    db.prepare('DELETE FROM ai_jobs WHERE id = ?').run(req.params.id);
     res.json({ success: true });
   });
 

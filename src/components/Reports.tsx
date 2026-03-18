@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Plus, Trash2, Edit2, Check, X, UploadCloud, FileText } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Plus, Trash2, Edit2, Check, X, UploadCloud, FileText, Settings } from 'lucide-react';
 
 interface ReportType {
   id: string;
@@ -14,6 +14,7 @@ interface ReportFile {
   typeName?: string;
   date?: string;
   title?: string;
+  original_name?: string;
   mime?: string;
   created_at?: string;
 }
@@ -34,8 +35,14 @@ export function Reports() {
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [preview, setPreview] = useState<{ id: string; title?: string; mime?: string } | null>(null);
+  const [showTypeModal, setShowTypeModal] = useState(false);
+  const [editingFile, setEditingFile] = useState<ReportFile | null>(null);
+  const [editDate, setEditDate] = useState('');
+  const [editTitle, setEditTitle] = useState('');
+  const [editTypeId, setEditTypeId] = useState('');
 
   const loadTypes = async () => {
     const res = await fetch('/api/report-types');
@@ -145,6 +152,9 @@ export function Reports() {
       }
       setUploadFile(null);
       setUploadTitle('');
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
       await loadFiles();
     } finally {
       setUploading(false);
@@ -157,6 +167,24 @@ export function Reports() {
     if (res.ok) {
       loadFiles();
     }
+  };
+
+  const openEditFile = (file: ReportFile) => {
+    setEditingFile(file);
+    setEditDate(file.date || '');
+    setEditTitle(file.title || file.original_name || '');
+    setEditTypeId(file.type_id);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingFile) return;
+    await fetch(`/api/report-files/${editingFile.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ typeId: editTypeId, date: editDate, title: editTitle })
+    });
+    setEditingFile(null);
+    loadFiles();
   };
 
   const renderPreview = () => {
@@ -190,61 +218,16 @@ export function Reports() {
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
       <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
-        <h2 className="text-xl font-bold text-slate-800 mb-4">报告类型管理</h2>
-        {typeError && (
-          <div className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2 mb-3">
-            {typeError}
-          </div>
-        )}
-        <div className="space-y-3">
-          {types.map((t) => (
-            <div key={t.id} className="flex items-center gap-2">
-              {editingTypeId === t.id ? (
-                <input
-                  className="flex-1 px-3 py-2 rounded-lg border border-slate-200"
-                  value={editingTypeName}
-                  onChange={(e) => setEditingTypeName(e.target.value)}
-                />
-              ) : (
-                <span className="flex-1 text-slate-700">{t.name}</span>
-              )}
-              {editingTypeId === t.id ? (
-                <>
-                  <button className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg" onClick={() => handleUpdateType(t.id)}>
-                    <Check size={18} />
-                  </button>
-                  <button className="p-2 text-slate-400 hover:bg-slate-100 rounded-lg" onClick={() => setEditingTypeId(null)}>
-                    <X size={18} />
-                  </button>
-                </>
-              ) : (
-                <>
-                  <button className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg" onClick={() => { setEditingTypeId(t.id); setEditingTypeName(t.name); }}>
-                    <Edit2 size={18} />
-                  </button>
-                  <button className="p-2 text-red-600 hover:bg-red-50 rounded-lg" onClick={() => handleDeleteType(t.id)}>
-                    <Trash2 size={18} />
-                  </button>
-                </>
-              )}
-            </div>
-          ))}
-          <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
-            <input
-              className="flex-1 px-3 py-2 rounded-lg border border-slate-200"
-              placeholder="新增类型，如：血常规"
-              value={newTypeName}
-              onChange={(e) => setNewTypeName(e.target.value)}
-            />
-            <button className="px-3 py-2 bg-blue-600 text-white rounded-lg" onClick={handleAddType}>
-              <Plus size={16} />
-            </button>
-          </div>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+          <h2 className="text-xl font-bold text-slate-800">上传报告</h2>
+          <button
+            className="flex items-center gap-2 px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200"
+            onClick={() => setShowTypeModal(true)}
+          >
+            <Settings size={16} />
+            管理类型
+          </button>
         </div>
-      </div>
-
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
-        <h2 className="text-xl font-bold text-slate-800 mb-4">上传报告</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
             <label className="block text-sm text-slate-600 mb-1">类型</label>
@@ -277,12 +260,21 @@ export function Reports() {
           </div>
           <div className="md:col-span-3">
             <label className="block text-sm text-slate-600 mb-1">文件</label>
-            <input
-              type="file"
-              accept="image/*,application/pdf"
-              onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
-              className="w-full"
-            />
+            <div className="flex items-center gap-3">
+              <label className="px-4 py-3 bg-blue-600 text-white rounded-lg cursor-pointer hover:bg-blue-700">
+                选择文件
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*,application/pdf"
+                  onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
+                  className="hidden"
+                />
+              </label>
+              <span className="text-sm text-slate-600 truncate">
+                {uploadFile?.name || '未选择文件'}
+              </span>
+            </div>
           </div>
         </div>
         {uploadError && (
@@ -337,25 +329,34 @@ export function Reports() {
                   {items.map((f) => {
                     const isPdf = f.mime?.includes('pdf');
                     const url = `/api/report-files/${f.id}`;
+                    const title = f.title || f.original_name || f.date || '报告文件';
                     return (
-                      <div key={f.id} className="flex items-center gap-3 p-3 border border-slate-100 rounded-xl bg-slate-50">
+                      <div key={f.id} className="relative flex items-center gap-4 p-4 border border-slate-100 rounded-xl bg-slate-50">
                         {isPdf ? (
-                          <div className="w-12 h-12 bg-white border border-slate-200 rounded-lg flex items-center justify-center text-slate-500">
-                            <FileText size={20} />
+                          <div
+                            className="w-24 h-24 bg-white border border-slate-200 rounded-lg flex items-center justify-center text-slate-500 cursor-pointer"
+                            onClick={() => setPreview({ id: f.id, title, mime: f.mime })}
+                          >
+                            <FileText size={28} />
                           </div>
                         ) : (
-                          <img src={url} alt={f.title || 'report'} className="w-12 h-12 object-cover rounded-lg border border-slate-200" />
+                          <img
+                            src={url}
+                            alt={title}
+                            className="w-24 h-24 object-cover rounded-lg border border-slate-200 cursor-pointer"
+                            onClick={() => setPreview({ id: f.id, title, mime: f.mime })}
+                          />
                         )}
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-slate-800 truncate">{f.title || f.date || '报告文件'}</p>
+                          <p className="text-sm font-medium text-slate-800 truncate">{title}</p>
                           <p className="text-xs text-slate-500">{f.date || '未填写日期'}</p>
                         </div>
                         <div className="flex items-center gap-2">
                           <button
                             className="px-2 py-1 text-xs rounded-lg border border-slate-200 text-slate-600"
-                            onClick={() => setPreview({ id: f.id, title: f.title, mime: f.mime })}
+                            onClick={() => openEditFile(f)}
                           >
-                            预览
+                            编辑
                           </button>
                           <a
                             className="px-2 py-1 text-xs rounded-lg border border-slate-200 text-slate-600"
@@ -365,13 +366,14 @@ export function Reports() {
                           >
                             下载
                           </a>
-                          <button
-                            className="px-2 py-1 text-xs rounded-lg border border-red-200 text-red-600"
-                            onClick={() => handleDeleteFile(f.id)}
-                          >
-                            删除
-                          </button>
                         </div>
+                        <button
+                          className="absolute -top-2 -right-2 bg-white text-slate-400 hover:text-red-500 rounded-full p-1.5 shadow-sm border border-slate-200"
+                          onClick={() => handleDeleteFile(f.id)}
+                          title="删除"
+                        >
+                          <Trash2 size={14} />
+                        </button>
                       </div>
                     );
                   })}
@@ -382,6 +384,121 @@ export function Reports() {
         </div>
       </div>
       {renderPreview()}
+
+      {showTypeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => setShowTypeModal(false)}>
+          <div className="bg-white rounded-2xl w-full max-w-lg p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-slate-800">报告类型管理</h3>
+              <button className="text-slate-500 hover:text-slate-700" onClick={() => setShowTypeModal(false)}>
+                <X size={18} />
+              </button>
+            </div>
+            {typeError && (
+              <div className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2 mb-3">
+                {typeError}
+              </div>
+            )}
+            <div className="space-y-3">
+              {types.map((t) => (
+                <div key={t.id} className="flex items-center gap-2">
+                  {editingTypeId === t.id ? (
+                    <input
+                      className="flex-1 px-3 py-2 rounded-lg border border-slate-200"
+                      value={editingTypeName}
+                      onChange={(e) => setEditingTypeName(e.target.value)}
+                    />
+                  ) : (
+                    <span className="flex-1 text-slate-700">{t.name}</span>
+                  )}
+                  {editingTypeId === t.id ? (
+                    <>
+                      <button className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg" onClick={() => handleUpdateType(t.id)}>
+                        <Check size={18} />
+                      </button>
+                      <button className="p-2 text-slate-400 hover:bg-slate-100 rounded-lg" onClick={() => setEditingTypeId(null)}>
+                        <X size={18} />
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg" onClick={() => { setEditingTypeId(t.id); setEditingTypeName(t.name); }}>
+                        <Edit2 size={18} />
+                      </button>
+                      <button className="p-2 text-red-600 hover:bg-red-50 rounded-lg" onClick={() => handleDeleteType(t.id)}>
+                        <Trash2 size={18} />
+                      </button>
+                    </>
+                  )}
+                </div>
+              ))}
+              <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
+                <input
+                  className="flex-1 px-3 py-2 rounded-lg border border-slate-200"
+                  placeholder="新增类型，如：血常规"
+                  value={newTypeName}
+                  onChange={(e) => setNewTypeName(e.target.value)}
+                />
+                <button className="px-3 py-2 bg-blue-600 text-white rounded-lg" onClick={handleAddType}>
+                  <Plus size={16} />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {editingFile && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => setEditingFile(null)}>
+          <div className="bg-white rounded-2xl w-full max-w-lg p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-slate-800">编辑报告</h3>
+              <button className="text-slate-500 hover:text-slate-700" onClick={() => setEditingFile(null)}>
+                <X size={18} />
+              </button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm text-slate-600 mb-1">类型</label>
+                <select
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200"
+                  value={editTypeId}
+                  onChange={(e) => setEditTypeId(e.target.value)}
+                >
+                  {types.map((t) => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm text-slate-600 mb-1">日期</label>
+                <input
+                  type="date"
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200"
+                  value={editDate}
+                  onChange={(e) => setEditDate(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-slate-600 mb-1">标题</label>
+                <input
+                  className="w-full px-3 py-2 rounded-lg border border-slate-200"
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <button className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg" onClick={() => setEditingFile(null)}>
+                  取消
+                </button>
+                <button className="px-4 py-2 bg-blue-600 text-white rounded-lg" onClick={handleSaveEdit}>
+                  保存
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
