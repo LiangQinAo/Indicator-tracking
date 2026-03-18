@@ -50,16 +50,16 @@ export function Settings({ indicators, onAdd, onUpdate, onDelete, onReset }: Set
   return (
     <div className="space-y-6 max-w-3xl mx-auto">
       <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
           <h2 className="text-xl font-bold text-slate-800">自定义追踪指标</h2>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full sm:w-auto">
             <button
               onClick={() => {
                 if (window.confirm('确定要恢复默认指标吗？这将会覆盖您当前的指标设置。')) {
                   onReset();
                 }
               }}
-              className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg transition-colors font-medium border border-slate-200"
+              className="w-full sm:w-auto px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg transition-colors font-medium border border-slate-200"
             >
               恢复默认
             </button>
@@ -68,7 +68,7 @@ export function Settings({ indicators, onAdd, onUpdate, onDelete, onReset }: Set
                 setIsAdding(true);
                 setEditForm({ color: '#3b82f6' });
               }}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-lg font-medium hover:bg-blue-100 transition-colors"
+              className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 rounded-lg font-medium hover:bg-blue-100 transition-colors"
             >
               <Plus size={18} />
               添加新指标
@@ -139,8 +139,8 @@ export function Settings({ indicators, onAdd, onUpdate, onDelete, onReset }: Set
                     className="w-full h-10 rounded-lg cursor-pointer"
                   />
                 </div>
-                <div className="flex items-center gap-4 col-span-1 sm:col-span-2 mt-2">
-                  <label className="flex items-center gap-2 cursor-pointer">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 col-span-1 sm:col-span-2 mt-2">
+                  <label className="flex items-center gap-2 cursor-pointer p-2 rounded-lg border border-slate-200 bg-white sm:border-transparent sm:bg-transparent">
                     <input
                       type="checkbox"
                       checked={editForm.isActive !== false}
@@ -149,7 +149,7 @@ export function Settings({ indicators, onAdd, onUpdate, onDelete, onReset }: Set
                     />
                     <span className="text-sm font-medium text-slate-700">启用该指标 (总开关)</span>
                   </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
+                  <label className="flex items-center gap-2 cursor-pointer p-2 rounded-lg border border-slate-200 bg-white sm:border-transparent sm:bg-transparent">
                     <input
                       type="checkbox"
                       checked={editForm.visibleInList !== false}
@@ -159,7 +159,7 @@ export function Settings({ indicators, onAdd, onUpdate, onDelete, onReset }: Set
                     />
                     <span className={`text-sm ${editForm.isActive === false ? 'text-slate-400' : 'text-slate-700'}`}>显示在录入/列表</span>
                   </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
+                  <label className="flex items-center gap-2 cursor-pointer p-2 rounded-lg border border-slate-200 bg-white sm:border-transparent sm:bg-transparent">
                     <input
                       type="checkbox"
                       checked={editForm.visibleInChart !== false}
@@ -227,8 +227,8 @@ export function Settings({ indicators, onAdd, onUpdate, onDelete, onReset }: Set
                     className="px-3 py-1.5 text-sm rounded-lg border border-slate-200"
                     placeholder="最大值"
                   />
-                  <div className="col-span-1 sm:col-span-6 flex items-center gap-4 mt-1">
-                    <label className="flex items-center gap-2 cursor-pointer">
+                  <div className="col-span-1 sm:col-span-6 grid grid-cols-1 sm:grid-cols-3 gap-2 mt-1">
+                    <label className="flex items-center gap-2 cursor-pointer p-2 rounded-lg border border-slate-200 bg-white sm:border-transparent sm:bg-transparent">
                       <input
                         type="checkbox"
                         checked={editForm.isActive !== false}
@@ -237,7 +237,7 @@ export function Settings({ indicators, onAdd, onUpdate, onDelete, onReset }: Set
                       />
                       <span className="text-sm font-medium text-slate-700">启用</span>
                     </label>
-                    <label className="flex items-center gap-2 cursor-pointer">
+                    <label className="flex items-center gap-2 cursor-pointer p-2 rounded-lg border border-slate-200 bg-white sm:border-transparent sm:bg-transparent">
                       <input
                         type="checkbox"
                         checked={editForm.visibleInList !== false}
@@ -247,7 +247,7 @@ export function Settings({ indicators, onAdd, onUpdate, onDelete, onReset }: Set
                       />
                       <span className={`text-sm ${editForm.isActive === false ? 'text-slate-400' : 'text-slate-700'}`}>列表</span>
                     </label>
-                    <label className="flex items-center gap-2 cursor-pointer">
+                    <label className="flex items-center gap-2 cursor-pointer p-2 rounded-lg border border-slate-200 bg-white sm:border-transparent sm:bg-transparent">
                       <input
                         type="checkbox"
                         checked={editForm.visibleInChart !== false}
@@ -268,17 +268,17 @@ export function Settings({ indicators, onAdd, onUpdate, onDelete, onReset }: Set
                     </h3>
                     <span className="text-xs text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full shrink-0 max-w-[6rem] truncate" title={ind.unit}>{ind.unit}</span>
                     
-                    <div className="flex items-center gap-2 ml-2">
+                    <div className="flex flex-col sm:flex-row gap-2 sm:ml-2 mt-2 sm:mt-0">
                       <button 
                         onClick={() => onUpdate({ ...ind, isActive: ind.isActive === false ? true : false })}
-                        className={`text-xs px-2 py-0.5 rounded-full border transition-colors ${ind.isActive !== false ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'bg-slate-50 text-slate-400 border-slate-200'}`}
+                        className={`text-xs px-2 py-1 rounded-full border transition-colors w-full sm:w-auto ${ind.isActive !== false ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'bg-slate-50 text-slate-400 border-slate-200'}`}
                         title="点击切换总开关"
                       >
                         总开关 {ind.isActive !== false ? '开' : '关'}
                       </button>
                       <button 
                         onClick={() => onUpdate({ ...ind, visibleInList: ind.visibleInList === false ? true : false })}
-                        className={`text-xs px-2 py-0.5 rounded-full border transition-colors ${ind.visibleInList !== false ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-slate-50 text-slate-400 border-slate-200'}`}
+                        className={`text-xs px-2 py-1 rounded-full border transition-colors w-full sm:w-auto ${ind.visibleInList !== false ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-slate-50 text-slate-400 border-slate-200'}`}
                         title="点击切换列表显示状态"
                         disabled={ind.isActive === false}
                         style={{ opacity: ind.isActive === false ? 0.5 : 1 }}
@@ -287,7 +287,7 @@ export function Settings({ indicators, onAdd, onUpdate, onDelete, onReset }: Set
                       </button>
                       <button 
                         onClick={() => onUpdate({ ...ind, visibleInChart: ind.visibleInChart === false ? true : false })}
-                        className={`text-xs px-2 py-0.5 rounded-full border transition-colors ${ind.visibleInChart !== false ? 'bg-purple-50 text-purple-600 border-purple-200' : 'bg-slate-50 text-slate-400 border-slate-200'}`}
+                        className={`text-xs px-2 py-1 rounded-full border transition-colors w-full sm:w-auto ${ind.visibleInChart !== false ? 'bg-purple-50 text-purple-600 border-purple-200' : 'bg-slate-50 text-slate-400 border-slate-200'}`}
                         title="点击切换图表显示状态"
                         disabled={ind.isActive === false}
                         style={{ opacity: ind.isActive === false ? 0.5 : 1 }}
