@@ -781,16 +781,22 @@ async function startServer() {
       if (message === 'invalid json response' || !data) {
         const raw = data?.raw || rawText;
         console.log(`${logPrefix} invalid_json raw=${String(raw || '').slice(0, 500)}`);
+        const err: any = new Error('INVALID_JSON_RESPONSE');
+        err.raw = raw;
+        throw err;
       }
       console.log(`${logPrefix} api_error=${message}`);
-      throw new Error(message === 'invalid json response' ? 'INVALID_JSON_RESPONSE' : message);
+      throw new Error(message);
     }
 
     const payload = data.data || {};
     const items = Array.isArray(payload.items) ? payload.items : [];
     if (typeof payload.checkDate !== 'string' || items.length === 0) {
-      console.log(`${logPrefix} invalid_json raw=${String(data?.raw || rawText || '').slice(0, 500)}`);
-      throw new Error('INVALID_JSON_RESPONSE');
+      const raw = data?.raw || rawText || '';
+      console.log(`${logPrefix} invalid_json raw=${String(raw).slice(0, 500)}`);
+      const err: any = new Error('INVALID_JSON_RESPONSE');
+      err.raw = raw;
+      throw err;
     }
     console.log(`${logPrefix} done total_ms=${Date.now() - t0}`);
     return {
@@ -899,7 +905,7 @@ async function startServer() {
       } else if (message === 'GEMINI_API_KEY_MISSING') {
         message = 'Gemini Key 未配置';
       } else if (message === 'INVALID_JSON_RESPONSE') {
-        message = 'invalid json response';
+        message = typeof error?.raw === 'string' && error.raw.trim().length > 0 ? error.raw.trim() : 'invalid json response';
       }
       const failed = attempt >= AI_MAX_ATTEMPTS;
       db.prepare('UPDATE ai_jobs SET status = ?, error = ?, updated_at = ? WHERE id = ?').run(
