@@ -47,20 +47,20 @@ export function RecordHistory({ records, indicators, onUpdate, onDelete }: Recor
       <h2 className="text-xl font-bold text-slate-800 mb-6">历史记录</h2>
       
       <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-        <div className="overflow-x-auto">
+        <div className="overflow-auto max-h-[70vh]">
           <table className="w-full text-sm text-left">
-            <thead className="bg-slate-50 text-slate-600 font-medium border-b border-slate-200">
+            <thead className="text-slate-600 font-medium border-b border-slate-200">
               <tr>
-                <th className="px-3 py-3 whitespace-nowrap">日期</th>
+                <th className="px-3 py-3 whitespace-nowrap sticky top-0 z-10 bg-slate-50">日期</th>
                 {listIndicators.map(ind => (
-                  <th key={ind.id} className="px-3 py-3 whitespace-nowrap" title={ind.name}>
+                  <th key={ind.id} className="px-3 py-3 whitespace-nowrap sticky top-0 z-10 bg-slate-50" title={ind.name}>
                     {ind.shortName || ind.name} 
                     <br />
                     <span className="text-xs text-slate-400 font-normal">({ind.minNormal + '-' +  ind.maxNormal})</span>
                   </th>
                 ))}
-                <th className="px-3 py-3 whitespace-nowrap">备注</th>
-                <th className="px-3 py-3 whitespace-nowrap text-right">操作</th>
+                <th className="px-3 py-3 whitespace-nowrap sticky top-0 z-10 bg-slate-50">备注</th>
+                <th className="px-3 py-3 whitespace-nowrap text-right sticky top-0 z-10 bg-slate-50">操作</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
