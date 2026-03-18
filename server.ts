@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'url';
 import multer from 'multer';
+import { GoogleGenAI, Type } from '@google/genai';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -31,6 +32,15 @@ async function startServer() {
     }
   });
   const uploadReport = multer({ storage: reportStorage });
+
+  const aiStorage = multer.diskStorage({
+    destination: aiUploadDir,
+    filename: (_req, file, cb) => {
+      const ext = path.extname(file.originalname || '');
+      cb(null, `${randomUUID()}${ext}`);
+    }
+  });
+  const uploadAi = multer({ storage: aiStorage });
 
   // Initialize Database
   const db = new DatabaseSync(path.join(__dirname, 'data.db'));
@@ -74,6 +84,21 @@ async function startServer() {
       mime TEXT,
       size INTEGER,
       created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS ai_jobs (
+      id TEXT PRIMARY KEY,
+      status TEXT NOT NULL,
+      attempts INTEGER DEFAULT 0,
+      file_path TEXT NOT NULL,
+      original_name TEXT,
+      mime TEXT,
+      date TEXT,
+      result_json TEXT,
+      conflict_json TEXT,
+      error TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
     );
   `);
 
@@ -147,6 +172,9 @@ async function startServer() {
       new Date().toISOString()
     );
   }
+
+  // Reset processing jobs to pending on startup
+  db.prepare(`UPDATE ai_jobs SET status = 'pending' WHERE status = 'processing'`).run();
 
   // API Routes
   
@@ -373,6 +401,260 @@ async function startServer() {
     db.prepare('DELETE FROM report_files WHERE id = ?').run(req.params.id);
     res.json({ success: true });
   });
+
+  // --- AI Jobs ---
+  app.post('/api/ai-jobs', uploadAi.single('file'), (req, res) => {
+    const file = req.file;
+    if (!file) return res.status(400).json({ error: 'file is required' });
+    const id = randomUUID();
+    const now = new Date().toISOString();
+    db.prepare(
+      'INSERT INTO ai_jobs (id, status, attempts, file_path, original_name, mime, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+    ).run(
+      id,
+      'pending',
+      0,
+      file.path,
+      file.originalname,
+      file.mimetype,
+      now,
+      now
+    );
+    res.json({ id });
+  });
+
+  app.get('/api/ai-jobs', (req, res) => {
+    const stmt = db.prepare('SELECT * FROM ai_jobs ORDER BY created_at DESC');
+    const rows = stmt.all() as any[];
+    const jobs = rows.map(row => ({
+      ...row,
+      result: row.result_json ? JSON.parse(row.result_json) : null,
+      conflict: row.conflict_json ? JSON.parse(row.conflict_json) : null
+    }));
+    res.json(jobs);
+  });
+
+  app.get('/api/ai-jobs/:id', (req, res) => {
+    const stmt = db.prepare('SELECT * FROM ai_jobs WHERE id = ?');
+    const row = stmt.get(req.params.id) as any;
+    if (!row) return res.status(404).end();
+    res.json({
+      ...row,
+      result: row.result_json ? JSON.parse(row.result_json) : null,
+      conflict: row.conflict_json ? JSON.parse(row.conflict_json) : null
+    });
+  });
+
+  app.get('/api/ai-jobs/:id/file', (req, res) => {
+    const stmt = db.prepare('SELECT * FROM ai_jobs WHERE id = ?');
+    const row = stmt.get(req.params.id) as any;
+    if (!row) return res.status(404).end();
+    if (row.mime) res.type(row.mime);
+    res.sendFile(row.file_path);
+  });
+
+  app.post('/api/ai-jobs/:id/resolve', (req, res) => {
+    const { status } = req.body as { status?: string };
+    if (!status || !['saved', 'ignored'].includes(status)) {
+      return res.status(400).json({ error: 'invalid status' });
+    }
+    db.prepare('UPDATE ai_jobs SET status = ?, updated_at = ? WHERE id = ?').run(
+      status,
+      new Date().toISOString(),
+      req.params.id
+    );
+    res.json({ success: true });
+  });
+
+  const AI_TIMEOUT_MS = 120000;
+  const AI_MAX_ATTEMPTS = 3;
+  const processingJobs = new Set<string>();
+
+  const runAiRecognition = async (filePath: string, mimeType: string) => {
+    if (!process.env.GEMINI_API_KEY) {
+      throw new Error('GEMINI_API_KEY_MISSING');
+    }
+    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+    const base64 = fs.readFileSync(filePath).toString('base64');
+    const parts = [{
+      inlineData: {
+        data: base64,
+        mimeType: mimeType || 'application/octet-stream'
+      }
+    }];
+
+    const indicators = db.prepare('SELECT id, name FROM indicators').all() as { id: string; name: string }[];
+
+    const prompt = `
+      请分析这张医疗化验单图片，提取以下信息：
+      1. 检查日期 (YYYY-MM-DD格式)
+      2. 所有的化验指标数据。
+
+      【极其重要 - 核心指标】：请务必优先且准确地提取以下四个核心指标（只要化验单上有）：
+      - 白细胞 (WBC)
+      - 血红蛋白 (HGB)
+      - 中性粒细胞计数 (NEUT#)
+      - 血小板 (PLT)
+
+      【极其重要 - 全面提取】：除了上述核心指标，请务必逐行扫描表格，提取出表格中的**每一项**化验指标！不要遗漏任何一行数据（例如：铁蛋白、尿酸、总胆固醇、甘油三酯、高密度脂蛋白胆固醇、低密度脂蛋白胆固醇等，只要在表格里就必须全部提取）。
+
+      注意：
+      1. 请仅提取表格中的实际化验指标！忽略页眉、页脚、医院名称、联系方式、备注说明等无关文本。
+      2. 提取指标名称时，请去除名称前后的特殊符号（如☆、*等）和英文缩写（如(UA)、(TC)等），只保留纯中文名称（例如，将"☆尿酸 ( UA )"提取为"尿酸"）。
+
+      我已经有一些预设的指标，列表如下：
+      ${indicators.map(i => `- ID: ${i.id}, 名称: ${i.name}`).join('\n')}
+
+      对于图片中提取到的每一个指标：
+      - 如果它能对应上预设列表中的某个指标，请提供该指标的 'matchedId'。
+      - 如果它是预设列表中没有的新指标，请不要提供 'matchedId'，但必须提供它的 'name' (名称), 'unit' (单位), 以及参考范围的 'minNormal' 和 'maxNormal' (如果有的话)。名称和单位必须简短（不超过20个字符）。
+      - 必须提供提取到的数值 'value'。
+    `;
+
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => reject(new Error('TIMEOUT')), AI_TIMEOUT_MS);
+    });
+
+    const response = await Promise.race([
+      ai.models.generateContent({
+        model: 'gemini-3-flash-preview',
+        contents: { parts: [...parts, { text: prompt }] },
+        config: {
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              date: { type: Type.STRING, description: "检查日期，格式 YYYY-MM-DD" },
+              items: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    matchedId: { type: Type.STRING, description: "如果匹配到预设指标，填入对应的ID" },
+                    name: { type: Type.STRING, description: "指标名称（简短，如'白细胞'）" },
+                    value: { type: Type.NUMBER, description: "检测数值" },
+                    unit: { type: Type.STRING, description: "单位（简短，如'10^9/L'）" },
+                    minNormal: { type: Type.NUMBER, description: "正常范围下限" },
+                    maxNormal: { type: Type.NUMBER, description: "正常范围上限" }
+                  },
+                  required: ["name", "value"]
+                }
+              }
+            }
+          }
+        }
+      }),
+      timeoutPromise
+    ]) as any;
+
+    const resultText = response.text || '{}';
+    return JSON.parse(resultText);
+  };
+
+  const processJob = async (job: any) => {
+    if (processingJobs.has(job.id)) return;
+    processingJobs.add(job.id);
+    const attempt = (job.attempts || 0) + 1;
+    const now = new Date().toISOString();
+    db.prepare('UPDATE ai_jobs SET status = ?, attempts = ?, updated_at = ? WHERE id = ?').run(
+      'processing',
+      attempt,
+      now,
+      job.id
+    );
+
+    try {
+      const result = await runAiRecognition(job.file_path, job.mime);
+      const indicators = db.prepare('SELECT id FROM indicators').all() as { id: string }[];
+      const indicatorIds = new Set(indicators.map(i => i.id));
+
+      const newValues: Record<string, number> = {};
+      const newIndicators: any[] = [];
+      const colors = ['#f43f5e', '#8b5cf6', '#06b6d4', '#10b981', '#f59e0b', '#3b82f6', '#ec4899', '#14b8a6'];
+
+      if (result.items && Array.isArray(result.items)) {
+        result.items.forEach((resItem: any) => {
+          if (resItem.value === null || resItem.value === undefined) return;
+          if (resItem.matchedId && indicatorIds.has(resItem.matchedId)) {
+            newValues[resItem.matchedId] = Number(resItem.value);
+          } else if (resItem.name && typeof resItem.name === 'string' && resItem.name.length <= 30) {
+            const newId = `custom_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+            const newIndicator = {
+              id: newId,
+              name: resItem.name.trim(),
+              unit: (resItem.unit && typeof resItem.unit === 'string') ? resItem.unit.substring(0, 20).trim() : '',
+              minNormal: resItem.minNormal,
+              maxNormal: resItem.maxNormal,
+              color: colors[Math.floor(Math.random() * colors.length)]
+            };
+            newIndicators.push(newIndicator);
+            newValues[newId] = Number(resItem.value);
+          }
+        });
+      }
+
+      const extractedDate = result.date || new Date().toISOString().split('T')[0];
+      const existingRow = db.prepare('SELECT * FROM records WHERE date = ? LIMIT 1').get(extractedDate) as any;
+      let conflict = null as any;
+      let status = 'success';
+
+      if (existingRow) {
+        const existingValues = JSON.parse(existingRow.values_json || '{}');
+        const diffs = Object.entries(newValues).filter(([key, value]) => {
+          return existingValues[key] !== undefined && Number(existingValues[key]) !== Number(value);
+        }).map(([key, value]) => ({
+          indicatorId: key,
+          oldValue: existingValues[key],
+          newValue: value
+        }));
+        conflict = {
+          recordId: existingRow.id,
+          diffs
+        };
+        status = 'conflict';
+      }
+
+      const resultPayload = {
+        date: extractedDate,
+        values: newValues,
+        newIndicators
+      };
+
+      db.prepare('UPDATE ai_jobs SET status = ?, date = ?, result_json = ?, conflict_json = ?, error = NULL, updated_at = ? WHERE id = ?').run(
+        status,
+        extractedDate,
+        JSON.stringify(resultPayload),
+        conflict ? JSON.stringify(conflict) : null,
+        new Date().toISOString(),
+        job.id
+      );
+    } catch (error: any) {
+      const message = error?.message === 'TIMEOUT' ? '识别超时' : (error?.message || '识别失败');
+      const failed = attempt >= AI_MAX_ATTEMPTS;
+      db.prepare('UPDATE ai_jobs SET status = ?, error = ?, updated_at = ? WHERE id = ?').run(
+        failed ? 'error' : 'pending',
+        message,
+        new Date().toISOString(),
+        job.id
+      );
+    } finally {
+      processingJobs.delete(job.id);
+    }
+  };
+
+  const pollJobs = async () => {
+    if (processingJobs.size >= 2) return;
+    const stmt = db.prepare(`SELECT * FROM ai_jobs WHERE status IN ('pending', 'processing') AND attempts < ? ORDER BY created_at ASC LIMIT 2`);
+    const rows = stmt.all(AI_MAX_ATTEMPTS) as any[];
+    for (const row of rows) {
+      if (!processingJobs.has(row.id)) {
+        processJob(row);
+      }
+    }
+  };
+
+  setInterval(pollJobs, 3000);
+  pollJobs();
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {

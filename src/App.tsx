@@ -50,11 +50,13 @@ export default function App() {
       )}
       {activeTab === 'add' && (
         <AddRecord 
+          records={records}
           indicators={indicators} 
           onAdd={(record) => {
             addRecord(record);
             setActiveTab('dashboard');
           }} 
+          onUpdate={updateRecord}
           onAddIndicator={addIndicator}
         />
       )}
