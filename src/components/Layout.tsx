@@ -23,7 +23,7 @@ export function Layout({ children }: LayoutProps) {
   const activePath = location.pathname === '/dashboard' ? '/' : location.pathname;
 
   return (
-    <div className="flex h-screen bg-slate-50 text-slate-900">
+    <div className="flex h-[100dvh] bg-slate-50 text-slate-900">
       {/* Desktop Sidebar */}
       <aside className="hidden md:flex flex-col w-64 bg-white border-r border-slate-200">
         <div className="p-6">
@@ -55,7 +55,7 @@ export function Layout({ children }: LayoutProps) {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-y-auto pb-20 md:pb-0 flex flex-col">
+      <main className="flex-1 overflow-y-auto pb-[calc(env(safe-area-inset-bottom)+5rem)] md:pb-0 flex flex-col">
         <div className="max-w-5xl mx-auto p-4 md:p-8 w-full flex flex-col min-h-full">
           {/* Mobile Header */}
           <header className="md:hidden mb-6 flex items-center gap-2">
