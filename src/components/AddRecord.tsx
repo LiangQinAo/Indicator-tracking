@@ -16,6 +16,7 @@ interface AiJobResult {
   date: string;
   values: Record<string, number>;
   newIndicators?: Indicator[];
+  mergeRecordId?: string;
 }
 
 interface AiJobConflict {
@@ -171,12 +172,31 @@ export function AddRecord({ records, indicators, onAdd, onUpdate, onAddIndicator
     if (job.result.newIndicators && job.result.newIndicators.length > 0) {
       job.result.newIndicators.forEach(ind => onAddIndicator(ind));
     }
-    onAdd({
-      id: uuidv4(),
-      date: job.result.date,
-      values: job.result.values,
-      notes: 'AI 识别导入'
-    });
+    if (job.result.mergeRecordId) {
+      const existing = records.find(r => r.id === job.result?.mergeRecordId);
+      if (existing) {
+        const mergedValues = { ...existing.values, ...job.result.values };
+        onUpdate({
+          ...existing,
+          date: job.result.date,
+          values: mergedValues
+        });
+      } else {
+        onAdd({
+          id: uuidv4(),
+          date: job.result.date,
+          values: job.result.values,
+          notes: 'AI 识别导入'
+        });
+      }
+    } else {
+      onAdd({
+        id: uuidv4(),
+        date: job.result.date,
+        values: job.result.values,
+        notes: 'AI 识别导入'
+      });
+    }
     await resolveJob(job.id, 'saved');
   };
 
@@ -295,12 +315,17 @@ export function AddRecord({ records, indicators, onAdd, onUpdate, onAddIndicator
             )}
 
             {detailJob.status !== 'conflict' && (
-              <button
-                className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm"
-                onClick={() => { saveJobRecord(detailJob); setDetailJob(null); }}
-              >
-                保存记录
-              </button>
+              <div className="flex flex-col gap-2">
+                {detailJob.result.mergeRecordId && (
+                  <div className="text-xs text-slate-500">将合并到同日期已有记录</div>
+                )}
+                <button
+                  className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm"
+                  onClick={() => { saveJobRecord(detailJob); setDetailJob(null); }}
+                >
+                  {detailJob.result.mergeRecordId ? '合并保存' : '保存记录'}
+                </button>
+              </div>
             )}
           </div>
         </div>

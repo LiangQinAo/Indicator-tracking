@@ -694,6 +694,7 @@ async function startServer() {
       const existingRow = db.prepare('SELECT * FROM records WHERE date = ? LIMIT 1').get(extractedDate) as any;
       let conflict = null as any;
       let status = 'success';
+      let mergeRecordId: string | null = null;
 
       if (existingRow) {
         const existingValues = JSON.parse(existingRow.values_json || '{}');
@@ -704,17 +705,22 @@ async function startServer() {
           oldValue: existingValues[key],
           newValue: value
         }));
-        conflict = {
-          recordId: existingRow.id,
-          diffs
-        };
-        status = 'conflict';
+        if (diffs.length > 0) {
+          conflict = {
+            recordId: existingRow.id,
+            diffs
+          };
+          status = 'conflict';
+        } else {
+          mergeRecordId = existingRow.id;
+        }
       }
 
       const resultPayload = {
         date: extractedDate,
         values: newValues,
-        newIndicators
+        newIndicators,
+        ...(mergeRecordId ? { mergeRecordId } : {})
       };
 
       db.prepare('UPDATE ai_jobs SET status = ?, date = ?, result_json = ?, conflict_json = ?, error = NULL, updated_at = ? WHERE id = ?').run(
