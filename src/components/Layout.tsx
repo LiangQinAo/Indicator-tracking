@@ -1,22 +1,26 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { LayoutDashboard, LineChart, PlusCircle, Settings, List, FileText } from 'lucide-react';
 import { cn } from '../lib/utils';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 interface LayoutProps {
   children: React.ReactNode;
-  activeTab: string;
-  setActiveTab: (tab: string) => void;
 }
 
-export function Layout({ children, activeTab, setActiveTab }: LayoutProps) {
+export function Layout({ children }: LayoutProps) {
+  const location = useLocation();
+  const navigate = useNavigate();
+
   const navItems = [
-    { id: 'dashboard', label: '概览', icon: LayoutDashboard },
-    { id: 'charts', label: '趋势图', icon: LineChart },
-    { id: 'history', label: '历史记录', icon: List },
-    { id: 'add', label: '录入数据', icon: PlusCircle },
-    { id: 'settings', label: '指标设置', icon: Settings },
-    { id: 'reports', label: '报告管理', icon: FileText },
+    { id: 'dashboard', label: '概览', icon: LayoutDashboard, path: '/' },
+    { id: 'charts', label: '趋势图', icon: LineChart, path: '/charts' },
+    { id: 'history', label: '历史记录', icon: List, path: '/history' },
+    { id: 'add', label: '录入数据', icon: PlusCircle, path: '/add' },
+    { id: 'settings', label: '指标设置', icon: Settings, path: '/settings' },
+    { id: 'reports', label: '报告管理', icon: FileText, path: '/reports' },
   ];
+
+  const activePath = location.pathname === '/dashboard' ? '/' : location.pathname;
 
   return (
     <div className="flex h-screen bg-slate-50 text-slate-900">
@@ -34,10 +38,10 @@ export function Layout({ children, activeTab, setActiveTab }: LayoutProps) {
             return (
               <button
                 key={item.id}
-                onClick={() => setActiveTab(item.id)}
+                onClick={() => navigate(item.path)}
                 className={cn(
                   "w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors text-sm font-medium",
-                  activeTab === item.id
+                  activePath === item.path
                     ? "bg-blue-50 text-blue-700"
                     : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
                 )}
@@ -71,10 +75,10 @@ export function Layout({ children, activeTab, setActiveTab }: LayoutProps) {
           return (
             <button
               key={item.id}
-              onClick={() => setActiveTab(item.id)}
+              onClick={() => navigate(item.path)}
               className={cn(
                 "flex flex-col items-center gap-1 py-3 px-4 flex-1",
-                activeTab === item.id ? "text-blue-600" : "text-slate-500"
+                activePath === item.path ? "text-blue-600" : "text-slate-500"
               )}
             >
               <Icon size={24} />

@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { useAppStore } from './store/useAppStore';
 import { Layout } from './components/Layout';
 import { Dashboard } from './components/Dashboard';
@@ -7,6 +6,8 @@ import { AddRecord } from './components/AddRecord';
 import { Settings } from './components/Settings';
 import { RecordHistory } from './components/RecordHistory';
 import { Reports } from './components/Reports';
+import { Admin } from './components/Admin';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 
 export default function App() {
   const { 
@@ -22,8 +23,6 @@ export default function App() {
     resetIndicators,
     reorderIndicators
   } = useAppStore();
-  
-  const [activeTab, setActiveTab] = useState('dashboard');
 
   if (!isLoaded) {
     return (
@@ -33,47 +32,62 @@ export default function App() {
     );
   }
 
+  const AddRecordRoute = () => {
+    const navigate = useNavigate();
+    return (
+      <AddRecord
+        records={records}
+        indicators={indicators}
+        onAdd={(record) => {
+          addRecord(record);
+          navigate('/');
+        }}
+        onUpdate={updateRecord}
+        onAddIndicator={addIndicator}
+      />
+    );
+  };
+
   return (
-    <Layout activeTab={activeTab} setActiveTab={setActiveTab}>
-      {activeTab === 'dashboard' && (
-        <Dashboard records={records} indicators={indicators} />
-      )}
-      {activeTab === 'charts' && (
-        <Charts records={records} indicators={indicators} />
-      )}
-      {activeTab === 'history' && (
-        <RecordHistory 
-          records={records} 
-          indicators={indicators} 
-          onUpdate={updateRecord} 
-          onDelete={deleteRecord} 
-        />
-      )}
-      {activeTab === 'add' && (
-        <AddRecord 
-          records={records}
-          indicators={indicators} 
-          onAdd={(record) => {
-            addRecord(record);
-            setActiveTab('dashboard');
-          }} 
-          onUpdate={updateRecord}
-          onAddIndicator={addIndicator}
-        />
-      )}
-      {activeTab === 'settings' && (
-        <Settings 
-          indicators={indicators}
-          onAdd={addIndicator}
-          onUpdate={updateIndicator}
-          onDelete={deleteIndicator}
-          onReset={resetIndicators}
-          onReorder={reorderIndicators}
-        />
-      )}
-      {activeTab === 'reports' && (
-        <Reports />
-      )}
-    </Layout>
+    <BrowserRouter>
+      <Layout>
+        <Routes>
+          <Route path="/" element={<Dashboard records={records} indicators={indicators} />} />
+          <Route path="/dashboard" element={<Navigate to="/" replace />} />
+          <Route path="/charts" element={<Charts records={records} indicators={indicators} />} />
+          <Route
+            path="/history"
+            element={
+              <RecordHistory
+                records={records}
+                indicators={indicators}
+                onUpdate={updateRecord}
+                onDelete={deleteRecord}
+              />
+            }
+          />
+          <Route
+            path="/add"
+            element={<AddRecordRoute />}
+          />
+          <Route
+            path="/settings"
+            element={
+              <Settings
+                indicators={indicators}
+                onAdd={addIndicator}
+                onUpdate={updateIndicator}
+                onDelete={deleteIndicator}
+                onReset={resetIndicators}
+                onReorder={reorderIndicators}
+              />
+            }
+          />
+          <Route path="/reports" element={<Reports />} />
+          <Route path="/admin" element={<Admin />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </Layout>
+    </BrowserRouter>
   );
 }

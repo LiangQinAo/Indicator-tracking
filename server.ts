@@ -125,7 +125,34 @@ async function startServer() {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS app_settings (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
   `);
+
+  const getSetting = (key: string, defaultValue?: string) => {
+    const row = db.prepare('SELECT value FROM app_settings WHERE key = ?').get(key) as { value?: string } | undefined;
+    if (!row && defaultValue !== undefined) {
+      db.prepare('INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, ?)').run(
+        key,
+        defaultValue,
+        new Date().toISOString()
+      );
+      return defaultValue;
+    }
+    return row?.value ?? defaultValue;
+  };
+
+  const setSetting = (key: string, value: string) => {
+    db.prepare('INSERT INTO app_settings (key, value, updated_at) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at').run(
+      key,
+      value,
+      new Date().toISOString()
+    );
+  };
 
   try {
     db.exec('ALTER TABLE indicators ADD COLUMN visibleInList INTEGER DEFAULT 1');
@@ -469,6 +496,21 @@ async function startServer() {
     res.json({ success: true });
   });
 
+  // --- Admin Settings ---
+  app.get('/api/admin/ai-provider', (_req, res) => {
+    const provider = getSetting('ai_provider', 'gemini');
+    res.json({ provider });
+  });
+
+  app.put('/api/admin/ai-provider', (req, res) => {
+    const { provider } = req.body as { provider?: string };
+    if (!provider || !['gemini', 'codex'].includes(provider)) {
+      return res.status(400).json({ error: 'invalid provider' });
+    }
+    setSetting('ai_provider', provider);
+    res.json({ success: true });
+  });
+
   // --- AI Jobs ---
   app.post('/api/ai-jobs', uploadAi.single('file'), (req, res) => {
     const file = req.file;
@@ -567,22 +609,7 @@ async function startServer() {
   const AI_MAX_ATTEMPTS = 3;
   const processingJobs = new Set<string>();
 
-  const runAiRecognition = async (filePath: string, mimeType: string) => {
-    if (!process.env.GEMINI_API_KEY) {
-      throw new Error('GEMINI_API_KEY_MISSING');
-    }
-    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-    const base64 = fs.readFileSync(filePath).toString('base64');
-    const parts = [{
-      inlineData: {
-        data: base64,
-        mimeType: mimeType || 'application/octet-stream'
-      }
-    }];
-
-    const indicators = db.prepare('SELECT id, name FROM indicators').all() as { id: string; name: string }[];
-
-    const prompt = `
+  const buildAiPrompt = (indicators: { id: string; name: string }[]) => `
       请分析这张医疗化验单图片，提取以下信息：
       1. 检查日期 (YYYY-MM-DD格式)
       2. 所有的化验指标数据。
@@ -607,6 +634,22 @@ async function startServer() {
       - 如果它是预设列表中没有的新指标，请不要提供 'matchedId'，但必须提供它的 'name' (名称), 'unit' (单位), 以及参考范围的 'minNormal' 和 'maxNormal' (如果有的话)。名称和单位必须简短（不超过20个字符）。
       - 必须提供提取到的数值 'value'。
     `;
+
+  const runGeminiRecognition = async (filePath: string, mimeType: string) => {
+    if (!process.env.GEMINI_API_KEY) {
+      throw new Error('GEMINI_API_KEY_MISSING');
+    }
+    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+    const base64 = fs.readFileSync(filePath).toString('base64');
+    const parts = [{
+      inlineData: {
+        data: base64,
+        mimeType: mimeType || 'application/octet-stream'
+      }
+    }];
+
+    const indicators = db.prepare('SELECT id, name FROM indicators').all() as { id: string; name: string }[];
+    const prompt = buildAiPrompt(indicators);
 
     const timeoutPromise = new Promise((_, reject) => {
       setTimeout(() => reject(new Error('TIMEOUT')), AI_TIMEOUT_MS);
@@ -646,6 +689,96 @@ async function startServer() {
 
     const resultText = response.text || '{}';
     return JSON.parse(resultText);
+  };
+
+  const runCodexRecognition = async (filePath: string, mimeType: string) => {
+    if (!process.env.CODEX_API_KEY) {
+      throw new Error('CODEX_API_KEY_MISSING');
+    }
+    const baseUrl = process.env.CODEX_API_BASE_URL || 'https://api.openai.com/v1/responses';
+    const model = process.env.CODEX_MODEL || 'gpt-4o-mini';
+    const base64 = fs.readFileSync(filePath).toString('base64');
+    const dataUrl = `data:${mimeType || 'application/octet-stream'};base64,${base64}`;
+    const indicators = db.prepare('SELECT id, name FROM indicators').all() as { id: string; name: string }[];
+    const prompt = buildAiPrompt(indicators);
+
+    const schema = {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        date: { type: 'string', description: '检查日期，格式 YYYY-MM-DD' },
+        items: {
+          type: 'array',
+          items: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              matchedId: { type: 'string', description: '如果匹配到预设指标，填入对应的ID' },
+              name: { type: 'string', description: "指标名称（简短，如'白细胞'）" },
+              value: { type: 'number', description: '检测数值' },
+              unit: { type: 'string', description: "单位（简短，如'10^9/L'）" },
+              minNormal: { type: 'number', description: '正常范围下限' },
+              maxNormal: { type: 'number', description: '正常范围上限' }
+            },
+            required: ['name', 'value']
+          }
+        }
+      },
+      required: ['date', 'items']
+    };
+
+    const res = await fetch(baseUrl, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.CODEX_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model,
+        input: [
+          {
+            role: 'user',
+            content: [
+              { type: 'input_text', text: prompt },
+              { type: 'input_image', image_url: dataUrl }
+            ]
+          }
+        ],
+        text: {
+          format: {
+            type: 'json_schema',
+            name: 'lab_result',
+            strict: true,
+            schema
+          }
+        }
+      })
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      const message = data?.error?.message || data?.message || 'CODEX_REQUEST_FAILED';
+      throw new Error(message);
+    }
+
+    const outputText = data.output_text
+      || (Array.isArray(data.output)
+        ? data.output
+            .flatMap((item: any) => item?.content || [])
+            .filter((c: any) => c?.type === 'output_text')
+            .map((c: any) => c?.text || '')
+            .join('')
+        : '');
+
+    return JSON.parse(outputText || '{}');
+  };
+
+  const runAiRecognition = async (filePath: string, mimeType: string) => {
+    const provider = getSetting('ai_provider', 'gemini');
+    if (provider === 'codex') {
+      return runCodexRecognition(filePath, mimeType);
+    }
+    return runGeminiRecognition(filePath, mimeType);
   };
 
   const processJob = async (job: any) => {
