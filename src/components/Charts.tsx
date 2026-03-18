@@ -3,8 +3,6 @@ import { Indicator, MedicalRecord } from '../types';
 import { format, parseISO, subDays, subWeeks, subMonths, subYears, isAfter } from 'date-fns';
 import { LineChart as RechartsLineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts';
 
-declare const __APP_VERSION__: string;
-
 interface ChartsProps {
   records: MedicalRecord[];
   indicators: Indicator[];
@@ -240,9 +238,6 @@ export function Charts({ records, indicators }: ChartsProps) {
           </div>
         )}
 
-        <div className="mt-4 text-right text-xs text-slate-400">
-          当前版本：{__APP_VERSION__}
-        </div>
       </div>
     </div>
   );

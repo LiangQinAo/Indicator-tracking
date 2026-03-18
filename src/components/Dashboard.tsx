@@ -4,6 +4,8 @@ import { format, parseISO } from 'date-fns';
 import { AlertCircle, CheckCircle2, Bot, Loader2 } from 'lucide-react';
 import { GoogleGenAI } from '@google/genai';
 
+declare const __APP_VERSION__: string;
+
 interface DashboardProps {
   records: MedicalRecord[];
   indicators: Indicator[];
@@ -108,6 +110,10 @@ export function Dashboard({ records, indicators }: DashboardProps) {
               </div>
             );
           })}
+        </div>
+
+        <div className="mt-4 text-right text-xs text-slate-400">
+          当前版本：{__APP_VERSION__}
         </div>
       </div>
 
