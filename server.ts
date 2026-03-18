@@ -8,13 +8,37 @@ import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'url';
 import multer from 'multer';
 import { GoogleGenAI, Type } from '@google/genai';
+import { ProxyAgent } from 'undici';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+const setupAiProxy = () => {
+  const proxyUrl = process.env.AI_PROXY_URL;
+  if (!proxyUrl) return;
+  if (typeof globalThis.fetch !== 'function') return;
+  const originalFetch = globalThis.fetch.bind(globalThis);
+  const proxyAgent = new ProxyAgent(proxyUrl);
+  const proxyHosts = ['generativelanguage.googleapis.com', 'ai.google.dev'];
+  globalThis.fetch = ((input: any, init?: any) => {
+    const url = typeof input === 'string'
+      ? input
+      : input instanceof URL
+        ? input.toString()
+        : input?.url;
+    if (url && proxyHosts.some(host => url.includes(host))) {
+      return originalFetch(input, { ...(init || {}), dispatcher: proxyAgent });
+    }
+    return originalFetch(input, init);
+  }) as typeof fetch;
+  console.log(`[ai-proxy] Enabled for ${proxyHosts.join(', ')}`);
+};
+
 async function startServer() {
   const app = express();
   const PORT = Number(process.env.PORT) || 3000;
+
+  setupAiProxy();
 
   app.use(express.json());
 
