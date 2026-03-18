@@ -6,6 +6,7 @@ import { Charts } from './components/Charts';
 import { AddRecord } from './components/AddRecord';
 import { Settings } from './components/Settings';
 import { RecordHistory } from './components/RecordHistory';
+import { Reports } from './components/Reports';
 
 export default function App() {
   const { 
@@ -65,6 +66,9 @@ export default function App() {
           onDelete={deleteIndicator}
           onReset={resetIndicators}
         />
+      )}
+      {activeTab === 'reports' && (
+        <Reports />
       )}
     </Layout>
   );

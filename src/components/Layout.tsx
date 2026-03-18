@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { LayoutDashboard, LineChart, PlusCircle, Settings, List } from 'lucide-react';
+import { LayoutDashboard, LineChart, PlusCircle, Settings, List, FileText } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 interface LayoutProps {
@@ -15,6 +15,7 @@ export function Layout({ children, activeTab, setActiveTab }: LayoutProps) {
     { id: 'history', label: '历史记录', icon: List },
     { id: 'add', label: '录入数据', icon: PlusCircle },
     { id: 'settings', label: '指标设置', icon: Settings },
+    { id: 'reports', label: '报告管理', icon: FileText },
   ];
 
   return (

@@ -1,8 +1,12 @@
+import 'dotenv/config';
 import express from 'express';
 import { createServer as createViteServer } from 'vite';
 import { DatabaseSync } from 'node:sqlite';
 import path from 'path';
+import fs from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'url';
+import multer from 'multer';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -12,6 +16,21 @@ async function startServer() {
   const PORT = Number(process.env.PORT) || 3000;
 
   app.use(express.json());
+
+  const uploadsDir = path.join(__dirname, 'uploads');
+  const reportUploadDir = path.join(uploadsDir, 'reports');
+  const aiUploadDir = path.join(uploadsDir, 'ai-jobs');
+  fs.mkdirSync(reportUploadDir, { recursive: true });
+  fs.mkdirSync(aiUploadDir, { recursive: true });
+
+  const reportStorage = multer.diskStorage({
+    destination: reportUploadDir,
+    filename: (_req, file, cb) => {
+      const ext = path.extname(file.originalname || '');
+      cb(null, `${randomUUID()}${ext}`);
+    }
+  });
+  const uploadReport = multer({ storage: reportStorage });
 
   // Initialize Database
   const db = new DatabaseSync(path.join(__dirname, 'data.db'));
@@ -36,6 +55,25 @@ async function startServer() {
       visibleInChart INTEGER DEFAULT 1,
       visibleInList INTEGER DEFAULT 1,
       shortName TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS report_types (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      sort_order INTEGER DEFAULT 0,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS report_files (
+      id TEXT PRIMARY KEY,
+      type_id TEXT NOT NULL,
+      date TEXT,
+      title TEXT,
+      file_path TEXT NOT NULL,
+      original_name TEXT,
+      mime TEXT,
+      size INTEGER,
+      created_at TEXT NOT NULL
     );
   `);
 
@@ -96,6 +134,18 @@ async function startServer() {
         ind.shortName || null
       );
     }
+  }
+
+  const reportTypeCountStmt = db.prepare('SELECT COUNT(*) as count FROM report_types');
+  const reportTypeCount = reportTypeCountStmt.get() as { count: number };
+  if (reportTypeCount.count === 0) {
+    const defaultTypeId = randomUUID();
+    db.prepare('INSERT INTO report_types (id, name, sort_order, created_at) VALUES (?, ?, ?, ?)').run(
+      defaultTypeId,
+      '默认',
+      0,
+      new Date().toISOString()
+    );
   }
 
   // API Routes
@@ -213,6 +263,114 @@ async function startServer() {
         ind.shortName || null
       );
     }
+    res.json({ success: true });
+  });
+
+  // --- Report Types ---
+  app.get('/api/report-types', (req, res) => {
+    const stmt = db.prepare('SELECT * FROM report_types ORDER BY sort_order ASC, created_at ASC');
+    const rows = stmt.all() as any[];
+    res.json(rows);
+  });
+
+  app.post('/api/report-types', (req, res) => {
+    const { name } = req.body;
+    if (!name) return res.status(400).json({ error: 'name is required' });
+    const maxOrderStmt = db.prepare('SELECT MAX(sort_order) as maxOrder FROM report_types');
+    const maxOrder = (maxOrderStmt.get() as { maxOrder: number | null }).maxOrder ?? 0;
+    const id = randomUUID();
+    db.prepare('INSERT INTO report_types (id, name, sort_order, created_at) VALUES (?, ?, ?, ?)').run(
+      id,
+      String(name).trim(),
+      maxOrder + 1,
+      new Date().toISOString()
+    );
+    res.json({ id, name });
+  });
+
+  app.put('/api/report-types/:id', (req, res) => {
+    const { name } = req.body;
+    if (!name) return res.status(400).json({ error: 'name is required' });
+    db.prepare('UPDATE report_types SET name = ? WHERE id = ?').run(String(name).trim(), req.params.id);
+    res.json({ success: true });
+  });
+
+  app.delete('/api/report-types/:id', (req, res) => {
+    const countStmt = db.prepare('SELECT COUNT(*) as count FROM report_files WHERE type_id = ?');
+    const count = countStmt.get(req.params.id) as { count: number };
+    if (count.count > 0) {
+      return res.status(409).json({ error: 'type_in_use' });
+    }
+    db.prepare('DELETE FROM report_types WHERE id = ?').run(req.params.id);
+    res.json({ success: true });
+  });
+
+  // --- Report Files ---
+  app.get('/api/report-files', (req, res) => {
+    const typeId = req.query.type_id as string | undefined;
+    let rows: any[] = [];
+    if (typeId) {
+      const stmt = db.prepare(`
+        SELECT rf.*, rt.name as typeName
+        FROM report_files rf
+        LEFT JOIN report_types rt ON rt.id = rf.type_id
+        WHERE rf.type_id = ?
+        ORDER BY rf.created_at DESC
+      `);
+      rows = stmt.all(typeId) as any[];
+    } else {
+      const stmt = db.prepare(`
+        SELECT rf.*, rt.name as typeName
+        FROM report_files rf
+        LEFT JOIN report_types rt ON rt.id = rf.type_id
+        ORDER BY rf.created_at DESC
+      `);
+      rows = stmt.all() as any[];
+    }
+    res.json(rows);
+  });
+
+  app.post('/api/report-files', uploadReport.single('file'), (req, res) => {
+    const file = req.file;
+    const { typeId, date, title } = req.body as { typeId?: string; date?: string; title?: string };
+    if (!file) return res.status(400).json({ error: 'file is required' });
+    if (!typeId) return res.status(400).json({ error: 'typeId is required' });
+
+    const id = randomUUID();
+    db.prepare(
+      'INSERT INTO report_files (id, type_id, date, title, file_path, original_name, mime, size, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    ).run(
+      id,
+      typeId,
+      date || null,
+      title || file.originalname,
+      file.path,
+      file.originalname,
+      file.mimetype,
+      file.size,
+      new Date().toISOString()
+    );
+    res.json({ id });
+  });
+
+  app.get('/api/report-files/:id', (req, res) => {
+    const stmt = db.prepare('SELECT * FROM report_files WHERE id = ?');
+    const row = stmt.get(req.params.id) as any;
+    if (!row) return res.status(404).end();
+    if (row.mime) res.type(row.mime);
+    res.sendFile(row.file_path);
+  });
+
+  app.delete('/api/report-files/:id', (req, res) => {
+    const stmt = db.prepare('SELECT * FROM report_files WHERE id = ?');
+    const row = stmt.get(req.params.id) as any;
+    if (!row) return res.status(404).end();
+    try {
+      fs.unlinkSync(row.file_path);
+    } catch (e) {
+      // ignore missing file
+    }
+    db.prepare('DELETE FROM report_files WHERE id = ?').run(req.params.id);
     res.json({ success: true });
   });
 
