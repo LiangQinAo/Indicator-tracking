@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Indicator, MedicalRecord } from '../types';
 import { v4 as uuidv4 } from 'uuid';
 import { useDropzone } from 'react-dropzone';
-import { UploadCloud, Loader2, AlertCircle, X, FileText, Info, Trash2 } from 'lucide-react';
+import { UploadCloud, Loader2, AlertCircle, X, FileText, Info, Trash2, RotateCw } from 'lucide-react';
 
 interface AddRecordProps {
   records: MedicalRecord[];
@@ -126,6 +126,14 @@ export function AddRecord({ records, indicators, onAdd, onUpdate, onAddIndicator
 
   const handleCancelJob = async (id: string) => {
     await fetch(`/api/ai-jobs/${id}`, { method: 'DELETE' });
+    loadJobs();
+  };
+
+  const handleRetryJob = async (id: string) => {
+    const res = await fetch(`/api/ai-jobs/${id}/retry`, { method: 'POST' });
+    if (!res.ok) {
+      setUploadError('重试失败，请稍后再试');
+    }
     loadJobs();
   };
 
@@ -449,7 +457,7 @@ export function AddRecord({ records, indicators, onAdd, onUpdate, onAddIndicator
                       <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
                     )}
 
-                    {(job.status === 'pending' || job.status === 'processing' || job.status === 'error') && (
+                    {(job.status === 'pending' || job.status === 'processing') && (
                       <button
                         className="p-2 text-slate-400 hover:text-red-500"
                         onClick={() => handleCancelJob(job.id)}
@@ -457,6 +465,25 @@ export function AddRecord({ records, indicators, onAdd, onUpdate, onAddIndicator
                       >
                         <Trash2 size={16} />
                       </button>
+                    )}
+
+                    {job.status === 'error' && (
+                      <div className="flex items-center gap-1">
+                        <button
+                          className="p-2 text-slate-400 hover:text-blue-600"
+                          onClick={() => handleRetryJob(job.id)}
+                          title="重试"
+                        >
+                          <RotateCw size={16} />
+                        </button>
+                        <button
+                          className="p-2 text-slate-400 hover:text-red-500"
+                          onClick={() => handleCancelJob(job.id)}
+                          title="删除任务"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
                     )}
 
                     {(job.status === 'success' || job.status === 'conflict') && (

@@ -547,6 +547,22 @@ async function startServer() {
     res.json({ success: true });
   });
 
+  app.post('/api/ai-jobs/:id/retry', (req, res) => {
+    const stmt = db.prepare('SELECT * FROM ai_jobs WHERE id = ?');
+    const row = stmt.get(req.params.id) as any;
+    if (!row) return res.status(404).end();
+    if (!row.file_path || !fs.existsSync(row.file_path)) {
+      return res.status(400).json({ error: 'FILE_MISSING' });
+    }
+    db.prepare('UPDATE ai_jobs SET status = ?, attempts = ?, error = NULL, result_json = NULL, conflict_json = NULL, updated_at = ? WHERE id = ?').run(
+      'pending',
+      0,
+      new Date().toISOString(),
+      req.params.id
+    );
+    res.json({ success: true });
+  });
+
   const AI_TIMEOUT_MS = 120000;
   const AI_MAX_ATTEMPTS = 3;
   const processingJobs = new Set<string>();
