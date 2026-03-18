@@ -707,10 +707,15 @@ async function startServer() {
       throw new Error('CODEX_API_KEY_MISSING');
     }
     const url = process.env.CODEX_API_BASE_URL || 'http://8.134.251.152:3200/vision/medical';
+    const t0 = Date.now();
+    const logPrefix = `[codex]`;
+    console.log(`${logPrefix} start file=${path.basename(filePath)} url=${url}`);
     const indicators = db.prepare('SELECT id, name FROM indicators').all() as { id: string; name: string }[];
     const prompt = buildAiPrompt(indicators);
 
+    const tReadStart = Date.now();
     const buffer = fs.readFileSync(filePath);
+    console.log(`${logPrefix} read_file_ms=${Date.now() - tReadStart}`);
     const blob = new Blob([buffer], { type: mimeType || 'application/octet-stream' });
     const form = new FormData();
     const filename = `upload${path.extname(filePath) || ''}`;
@@ -723,6 +728,7 @@ async function startServer() {
     const timer = setTimeout(() => controller.abort(), AI_TIMEOUT_MS + 5000);
     let res: Response;
     try {
+      const tReqStart = Date.now();
       res = await fetch(url, {
         method: 'POST',
         headers: {
@@ -731,25 +737,32 @@ async function startServer() {
         body: form,
         signal: controller.signal
       });
+      console.log(`${logPrefix} response_ms=${Date.now() - tReqStart} status=${res.status}`);
     } catch (error: any) {
       if (error?.name === 'AbortError') {
+        console.log(`${logPrefix} timeout_ms=${Date.now() - t0}`);
         throw new Error('TIMEOUT');
       }
+      console.log(`${logPrefix} fetch_error=${error?.message || error}`);
       throw error;
     } finally {
       clearTimeout(timer);
     }
 
+    const tJsonStart = Date.now();
     const data = await res.json().catch(() => null);
+    console.log(`${logPrefix} json_parse_ms=${Date.now() - tJsonStart}`);
     if (!res.ok || !data?.ok) {
       const message = data?.error || `CODEX_REQUEST_FAILED_${res.status}`;
       if (message === 'timeout') {
         throw new Error('TIMEOUT');
       }
+      console.log(`${logPrefix} api_error=${message}`);
       throw new Error(message);
     }
 
     const payload = data.data || {};
+    console.log(`${logPrefix} done total_ms=${Date.now() - t0}`);
     return {
       date: payload.checkDate || payload.date || '',
       items: Array.isArray(payload.items) ? payload.items : []
