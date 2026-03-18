@@ -603,6 +603,13 @@ export function AddRecord({ records, indicators, onAdd, onUpdate, onAddIndicator
                                   <Info size={14} />
                                   详情
                                 </button>
+                                <button
+                                  className="p-2 text-slate-400 hover:text-red-500"
+                                  onClick={() => handleCancelJob(job.id)}
+                                  title="删除已保存任务"
+                                >
+                                  <Trash2 size={16} />
+                                </button>
                               </div>
                             );
                           })}
