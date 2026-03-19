@@ -216,7 +216,7 @@ export function Reports() {
   };
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto">
+    <div className="space-y-6 max-w-5xl mx-auto overflow-x-hidden">
       <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
           <h2 className="text-xl font-bold text-slate-800">上传报告</h2>
@@ -260,8 +260,8 @@ export function Reports() {
           </div>
           <div className="md:col-span-3">
             <label className="block text-sm text-slate-600 mb-1">文件</label>
-            <div className="flex items-center gap-3">
-              <label className="px-4 py-3 bg-blue-600 text-white rounded-lg cursor-pointer hover:bg-blue-700">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3 min-w-0">
+              <label className="px-4 py-3 bg-blue-600 text-white rounded-lg cursor-pointer hover:bg-blue-700 shrink-0 text-center">
                 选择文件
                 <input
                   ref={fileInputRef}
@@ -271,7 +271,7 @@ export function Reports() {
                   className="hidden"
                 />
               </label>
-              <span className="text-sm text-slate-600 truncate">
+              <span className="text-sm text-slate-600 min-w-0 break-all">
                 {uploadFile?.name || '未选择文件'}
               </span>
             </div>
@@ -331,10 +331,10 @@ export function Reports() {
                     const url = `/api/report-files/${f.id}`;
                     const title = f.title || f.original_name || f.date || '报告文件';
                     return (
-                      <div key={f.id} className="relative flex items-center gap-4 p-4 border border-slate-100 rounded-xl bg-slate-50">
+                      <div key={f.id} className="relative flex flex-col sm:flex-row sm:items-center gap-4 p-4 border border-slate-100 rounded-xl bg-slate-50 overflow-hidden">
                         {isPdf ? (
                           <div
-                            className="w-24 h-24 bg-white border border-slate-200 rounded-lg flex items-center justify-center text-slate-500 cursor-pointer"
+                            className="w-full sm:w-24 h-32 sm:h-24 bg-white border border-slate-200 rounded-lg flex items-center justify-center text-slate-500 cursor-pointer shrink-0"
                             onClick={() => setPreview({ id: f.id, title, mime: f.mime })}
                           >
                             <FileText size={28} />
@@ -343,15 +343,15 @@ export function Reports() {
                           <img
                             src={url}
                             alt={title}
-                            className="w-24 h-24 object-cover rounded-lg border border-slate-200 cursor-pointer"
+                            className="w-full sm:w-24 h-32 sm:h-24 object-cover rounded-lg border border-slate-200 cursor-pointer shrink-0"
                             onClick={() => setPreview({ id: f.id, title, mime: f.mime })}
                           />
                         )}
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-slate-800 truncate">{title}</p>
+                          <p className="text-sm font-medium text-slate-800 break-words pr-8 sm:pr-0">{title}</p>
                           <p className="text-xs text-slate-500">{f.date || '未填写日期'}</p>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center justify-end gap-2 w-full sm:w-auto shrink-0">
                           <button
                             className="px-2 py-1 text-xs rounded-lg border border-slate-200 text-slate-600"
                             onClick={() => openEditFile(f)}
@@ -387,7 +387,7 @@ export function Reports() {
 
       {showTypeModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => setShowTypeModal(false)}>
-          <div className="bg-white rounded-2xl w-full max-w-lg p-6" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-white rounded-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-bold text-slate-800">报告类型管理</h3>
               <button className="text-slate-500 hover:text-slate-700" onClick={() => setShowTypeModal(false)}>
@@ -401,7 +401,7 @@ export function Reports() {
             )}
             <div className="space-y-3">
               {types.map((t) => (
-                <div key={t.id} className="flex items-center gap-2">
+                <div key={t.id} className="flex items-center gap-2 min-w-0">
                   {editingTypeId === t.id ? (
                     <input
                       className="flex-1 px-3 py-2 rounded-lg border border-slate-200"
@@ -409,7 +409,7 @@ export function Reports() {
                       onChange={(e) => setEditingTypeName(e.target.value)}
                     />
                   ) : (
-                    <span className="flex-1 text-slate-700">{t.name}</span>
+                    <span className="flex-1 text-slate-700 break-words min-w-0">{t.name}</span>
                   )}
                   {editingTypeId === t.id ? (
                     <>
@@ -432,7 +432,7 @@ export function Reports() {
                   )}
                 </div>
               ))}
-              <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
+              <div className="flex items-center gap-2 pt-2 border-t border-slate-100 min-w-0">
                 <input
                   className="flex-1 px-3 py-2 rounded-lg border border-slate-200"
                   placeholder="新增类型，如：血常规"
@@ -450,7 +450,7 @@ export function Reports() {
 
       {editingFile && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => setEditingFile(null)}>
-          <div className="bg-white rounded-2xl w-full max-w-lg p-6" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-white rounded-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-bold text-slate-800">编辑报告</h3>
               <button className="text-slate-500 hover:text-slate-700" onClick={() => setEditingFile(null)}>
