@@ -616,7 +616,7 @@ async function startServer() {
     res.json({ success: true });
   });
 
-  const AI_TIMEOUT_MS = 120000;
+  const AI_TIMEOUT_MS = 300000;
   const AI_MAX_ATTEMPTS = 3;
   const processingJobs = new Set<string>();
 
