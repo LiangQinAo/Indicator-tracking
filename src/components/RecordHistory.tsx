@@ -46,27 +46,27 @@ export function RecordHistory({ records, indicators, onUpdate, onDelete }: Recor
     <div className="space-y-4 flex flex-col flex-1 min-h-0">
       <h2 className="text-xl font-bold text-slate-800 mb-6">历史记录</h2>
       
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-visible md:overflow-hidden flex flex-col flex-1 min-h-0">
-        <div className="overflow-visible md:overflow-auto md:flex-1 md:min-h-0">
-          <table className="w-full text-sm text-left">
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden flex flex-col flex-1 min-h-0">
+        <div className="overflow-x-auto overflow-y-visible md:overflow-auto md:flex-1 md:min-h-0">
+          <table className="w-full min-w-max text-sm text-left">
             <thead className="text-slate-600 font-medium border-b border-slate-200">
               <tr>
-                <th className="px-3 py-3 whitespace-nowrap sticky top-0 z-10 bg-slate-50">日期</th>
+                <th className="px-2 sm:px-3 py-3 whitespace-nowrap sticky top-0 z-10 bg-slate-50">日期</th>
                 {listIndicators.map(ind => (
-                  <th key={ind.id} className="px-3 py-3 whitespace-nowrap sticky top-0 z-10 bg-slate-50" title={ind.name}>
+                  <th key={ind.id} className="px-2 sm:px-3 py-3 whitespace-nowrap sticky top-0 z-10 bg-slate-50" title={ind.name}>
                     {ind.shortName || ind.name} 
                     <br />
                     <span className="text-xs text-slate-400 font-normal">({ind.minNormal + '-' +  ind.maxNormal})</span>
                   </th>
                 ))}
-                <th className="px-3 py-3 whitespace-nowrap sticky top-0 z-10 bg-slate-50">备注</th>
-                <th className="px-3 py-3 whitespace-nowrap text-right sticky top-0 z-10 bg-slate-50">操作</th>
+                <th className="px-2 sm:px-3 py-3 whitespace-nowrap sticky top-0 z-10 bg-slate-50">备注</th>
+                <th className="px-2 sm:px-3 py-3 whitespace-nowrap text-right sticky top-0 z-10 bg-slate-50">操作</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {sortedRecords.map(record => (
                 <tr key={record.id} className="hover:bg-slate-50 transition-colors">
-                  <td className="px-3 py-3 whitespace-nowrap">
+                  <td className="px-2 sm:px-3 py-3 whitespace-nowrap">
                     {editingId === record.id ? (
                       <input
                         type="date"
@@ -76,11 +76,11 @@ export function RecordHistory({ records, indicators, onUpdate, onDelete }: Recor
                       />
                     ) : (
                       <span className=" text-slate-500">{record.date}</span>
-                    )}
+                  )}
                   </td>
                   
                   {listIndicators.map(ind => (
-                    <td key={ind.id} className="font-bold px-3 py-3 whitespace-nowrap">
+                    <td key={ind.id} className="font-bold px-2 sm:px-3 py-3 whitespace-nowrap">
                       {editingId === record.id ? (
                         <input
                           type="number"
@@ -109,7 +109,7 @@ export function RecordHistory({ records, indicators, onUpdate, onDelete }: Recor
                     </td>
                   ))}
                   
-                  <td className="px-4 py-3">
+                  <td className="px-3 sm:px-4 py-3 min-w-[120px]">
                     {editingId === record.id ? (
                       <input
                         type="text"
@@ -122,10 +122,10 @@ export function RecordHistory({ records, indicators, onUpdate, onDelete }: Recor
                       <span className="text-slate-500 truncate max-w-[150px] inline-block" title={record.notes}>
                         {record.notes || '-'}
                       </span>
-                    )}
+                  )}
                   </td>
                   
-                  <td className="px-4 py-3 whitespace-nowrap text-right">
+                  <td className="px-3 sm:px-4 py-3 whitespace-nowrap text-right">
                     {editingId === record.id ? (
                       <div className="flex items-center justify-end gap-2">
                         <button onClick={handleSave} className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded transition-colors" title="保存">
