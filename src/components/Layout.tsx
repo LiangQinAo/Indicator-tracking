@@ -21,9 +21,15 @@ export function Layout({ children }: LayoutProps) {
   ];
 
   const activePath = location.pathname === '/dashboard' ? '/' : location.pathname;
+  const isHistoryPage = activePath === '/history';
 
   return (
-    <div className="flex min-h-[100dvh] flex-col bg-slate-50 text-slate-900 md:h-[100dvh] md:flex-row">
+    <div
+      className={cn(
+        'flex flex-col bg-slate-50 text-slate-900 md:h-[100dvh] md:flex-row',
+        isHistoryPage ? 'h-[100dvh]' : 'min-h-[100dvh]',
+      )}
+    >
       {/* Desktop Sidebar */}
       <aside className="hidden md:flex flex-col w-64 bg-white border-r border-slate-200">
         <div className="p-6">
@@ -55,14 +61,24 @@ export function Layout({ children }: LayoutProps) {
       </aside>
 
       {/* Main Content */}
-      <main className="flex min-h-0 flex-1 flex-col overflow-y-auto pb-[calc(env(safe-area-inset-bottom)+6.5rem)] md:pb-0">
-        <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col p-4 md:min-h-0 md:p-8">
+      <main
+        className={cn(
+          'flex min-h-0 flex-1 flex-col md:pb-0',
+          isHistoryPage ? 'overflow-hidden md:overflow-y-auto' : 'overflow-y-auto pb-[calc(env(safe-area-inset-bottom)+6.5rem)]',
+        )}
+      >
+        <div
+          className={cn(
+            'mx-auto flex w-full max-w-5xl flex-1 flex-col p-4 md:min-h-0 md:p-8',
+            isHistoryPage && 'min-h-0 pb-[calc(env(safe-area-inset-bottom)+6.5rem)]',
+          )}
+        >
           {/* Mobile Header */}
           <header className="mb-6 flex shrink-0 items-center gap-2 md:hidden">
             <LineChart className="text-blue-600" />
             <h1 className="text-xl font-bold text-slate-800">指标追踪</h1>
           </header>
-          <div className="flex flex-1 flex-col md:min-h-0">
+          <div className={cn('flex flex-1 flex-col md:min-h-0', isHistoryPage && 'min-h-0')}>
             {children}
           </div>
         </div>
