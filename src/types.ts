@@ -9,6 +9,7 @@ export interface Indicator {
   isActive?: boolean;
   visibleInList?: boolean;
   visibleInChart?: boolean;
+  sort_order?: number;
 }
 
 export interface MedicalRecord {
@@ -18,6 +19,15 @@ export interface MedicalRecord {
     [indicatorId: string]: number;
   };
   notes?: string;
+}
+
+export interface EventMarker {
+  id: string;
+  date: string;
+  title: string;
+  notes?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export const DEFAULT_INDICATORS: Indicator[] = [

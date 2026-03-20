@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Plus, Trash2, Edit2, Check, X, UploadCloud, FileText, Settings, Download } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Plus, Trash2, Edit2, Check, X, UploadCloud, FileText, Settings, Download, RotateCw } from 'lucide-react';
 
 interface ReportType {
   id: string;
@@ -49,6 +49,7 @@ export function Reports() {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [showUploadSheet, setShowUploadSheet] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [preview, setPreview] = useState<ReportFile | null>(null);
@@ -69,7 +70,7 @@ export function Reports() {
     };
   }, [hasOverlay]);
 
-  const loadTypes = async () => {
+  const loadTypes = useCallback(async () => {
     const res = await fetch('/api/report-types');
     if (res.ok) {
       const data = (await res.json()) as ReportType[];
@@ -93,9 +94,9 @@ export function Reports() {
         setShowUploadSheet(false);
       }
     }
-  };
+  }, []);
 
-  const loadFiles = async () => {
+  const loadFiles = useCallback(async () => {
     const res = await fetch('/api/report-files');
     if (res.ok) {
       const data = (await res.json()) as ReportFile[];
@@ -103,12 +104,20 @@ export function Reports() {
       setPreview((current) => (current ? data.find((file) => file.id === current.id) ?? null : current));
       setEditingFile((current) => (current ? data.find((file) => file.id === current.id) ?? null : current));
     }
-  };
+  }, []);
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await Promise.all([loadTypes(), loadFiles()]);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [loadFiles, loadTypes]);
 
   useEffect(() => {
-    loadTypes();
-    loadFiles();
-  }, []);
+    handleRefresh();
+  }, [handleRefresh]);
 
   const groupedFiles = useMemo(() => {
     const map = new Map<string, ReportFile[]>();
@@ -352,10 +361,20 @@ export function Reports() {
             <h2 className="text-lg font-bold text-slate-900 md:text-xl">上传报告</h2>
             <p className="mt-1 text-sm text-slate-500">本地保存图片与 PDF，手机上可全屏上传和预览。</p>
           </div>
-          <button className={`${secondaryButtonClassName} shrink-0 px-3 py-2`} onClick={() => setShowTypeModal(true)}>
-            <Settings size={16} />
-            管理类型
-          </button>
+          <div className="flex shrink-0 items-center gap-2">
+            <button
+              className={`${secondaryButtonClassName} h-10 w-10 rounded-xl p-0`}
+              onClick={handleRefresh}
+              disabled={refreshing}
+              title="刷新报告"
+            >
+              <RotateCw size={16} className={refreshing ? 'animate-spin' : ''} />
+            </button>
+            <button className={`${secondaryButtonClassName} shrink-0 px-3 py-2`} onClick={() => setShowTypeModal(true)}>
+              <Settings size={16} />
+              管理类型
+            </button>
+          </div>
         </div>
 
         {!hasTypes ? (

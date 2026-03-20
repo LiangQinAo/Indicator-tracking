@@ -10,10 +10,13 @@ import { Admin } from './components/Admin';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 
 export default function App() {
-  const { 
-    records, 
-    indicators, 
+  const {
+    records,
+    indicators,
+    markers,
     isLoaded,
+    isRefreshingAll,
+    refreshAll,
     addRecord,
     updateRecord,
     deleteRecord,
@@ -21,7 +24,8 @@ export default function App() {
     updateIndicator,
     deleteIndicator,
     resetIndicators,
-    reorderIndicators
+    reorderIndicators,
+    addEventMarker,
   } = useAppStore();
 
   if (!isLoaded) {
@@ -38,12 +42,14 @@ export default function App() {
       <AddRecord
         records={records}
         indicators={indicators}
+        markers={markers}
         onAdd={(record) => {
           addRecord(record);
           navigate('/');
         }}
         onUpdate={updateRecord}
         onAddIndicator={addIndicator}
+        onAddMarker={addEventMarker}
       />
     );
   };
@@ -52,15 +58,40 @@ export default function App() {
     <BrowserRouter>
       <Layout>
         <Routes>
-          <Route path="/" element={<Dashboard records={records} indicators={indicators} />} />
+          <Route
+            path="/"
+            element={
+              <Dashboard
+                records={records}
+                indicators={indicators}
+                markers={markers}
+                onRefresh={refreshAll}
+                isRefreshing={isRefreshingAll}
+              />
+            }
+          />
           <Route path="/dashboard" element={<Navigate to="/" replace />} />
-          <Route path="/charts" element={<Charts records={records} indicators={indicators} />} />
+          <Route
+            path="/charts"
+            element={
+              <Charts
+                records={records}
+                indicators={indicators}
+                markers={markers}
+                onRefresh={refreshAll}
+                isRefreshing={isRefreshingAll}
+              />
+            }
+          />
           <Route
             path="/history"
             element={
               <RecordHistory
                 records={records}
                 indicators={indicators}
+                markers={markers}
+                onRefresh={refreshAll}
+                isRefreshing={isRefreshingAll}
                 onUpdate={updateRecord}
                 onDelete={deleteRecord}
               />

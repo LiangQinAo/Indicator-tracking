@@ -131,6 +131,15 @@ async function startServer() {
       value TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS event_markers (
+      id TEXT PRIMARY KEY,
+      date TEXT NOT NULL,
+      title TEXT NOT NULL,
+      notes TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
   `);
 
   const getSetting = (key: string, defaultValue?: string) => {
@@ -154,6 +163,15 @@ async function startServer() {
     );
   };
 
+  const mapEventMarkerRow = (row: any) => ({
+    id: row.id,
+    date: row.date,
+    title: row.title,
+    notes: row.notes,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  });
+
   try {
     db.exec('ALTER TABLE indicators ADD COLUMN visibleInList INTEGER DEFAULT 1');
   } catch (e) { /* ignore if exists */ }
@@ -166,6 +184,25 @@ async function startServer() {
 
   try {
     db.exec('UPDATE indicators SET sort_order = rowid WHERE sort_order IS NULL OR sort_order = 0');
+  } catch (e) { /* ignore */ }
+
+  try {
+    db.exec('ALTER TABLE event_markers ADD COLUMN notes TEXT');
+  } catch (e) { /* ignore if exists */ }
+  try {
+    db.exec('ALTER TABLE event_markers ADD COLUMN created_at TEXT');
+  } catch (e) { /* ignore if exists */ }
+  try {
+    db.exec('ALTER TABLE event_markers ADD COLUMN updated_at TEXT');
+  } catch (e) { /* ignore if exists */ }
+
+  try {
+    db.exec(`
+      UPDATE event_markers
+      SET created_at = COALESCE(created_at, datetime('now')),
+          updated_at = COALESCE(updated_at, created_at, datetime('now'))
+      WHERE created_at IS NULL OR updated_at IS NULL
+    `);
   } catch (e) { /* ignore */ }
 
   // Check if indicators table is empty, if so, seed it
@@ -268,6 +305,55 @@ async function startServer() {
   app.delete('/api/records/:id', (req, res) => {
     const stmt = db.prepare('DELETE FROM records WHERE id = ?');
     stmt.run(req.params.id);
+    res.json({ success: true });
+  });
+
+  // --- Event Markers ---
+  app.get('/api/event-markers', (_req, res) => {
+    const stmt = db.prepare('SELECT * FROM event_markers ORDER BY date DESC, created_at DESC');
+    const rows = stmt.all() as any[];
+    res.json(rows.map(mapEventMarkerRow));
+  });
+
+  app.post('/api/event-markers', (req, res) => {
+    const { id, date, title, notes } = req.body as { id?: string; date?: string; title?: string; notes?: string | null };
+    const trimmedTitle = typeof title === 'string' ? title.trim() : '';
+    if (!id || !date || !trimmedTitle) {
+      return res.status(400).json({ error: 'id, date, and title are required' });
+    }
+    const now = new Date().toISOString();
+    db.prepare('INSERT INTO event_markers (id, date, title, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)').run(
+      id,
+      date,
+      trimmedTitle,
+      notes ?? null,
+      now,
+      now
+    );
+    const row = db.prepare('SELECT * FROM event_markers WHERE id = ?').get(id) as any;
+    res.json(mapEventMarkerRow(row));
+  });
+
+  app.put('/api/event-markers/:id', (req, res) => {
+    const existing = db.prepare('SELECT * FROM event_markers WHERE id = ?').get(req.params.id) as any;
+    if (!existing) return res.status(404).end();
+    const { date, title, notes } = req.body as { date?: string; title?: string; notes?: string | null };
+    const nextTitle = typeof title === 'string' ? title.trim() : existing.title;
+    db.prepare('UPDATE event_markers SET date = ?, title = ?, notes = ?, updated_at = ? WHERE id = ?').run(
+      date ?? existing.date,
+      nextTitle || existing.title,
+      notes === undefined ? existing.notes : notes,
+      new Date().toISOString(),
+      req.params.id
+    );
+    const row = db.prepare('SELECT * FROM event_markers WHERE id = ?').get(req.params.id) as any;
+    res.json(mapEventMarkerRow(row));
+  });
+
+  app.delete('/api/event-markers/:id', (req, res) => {
+    const existing = db.prepare('SELECT id FROM event_markers WHERE id = ?').get(req.params.id) as any;
+    if (!existing) return res.status(404).end();
+    db.prepare('DELETE FROM event_markers WHERE id = ?').run(req.params.id);
     res.json({ success: true });
   });
 

@@ -27,7 +27,7 @@ export function Settings({ indicators, onAdd, onUpdate, onDelete, onReset, onReo
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } })
+    useSensor(TouchSensor, { activationConstraint: { delay: 280, tolerance: 3 } })
   );
 
   const handleEdit = (ind: Indicator) => {
@@ -272,9 +272,15 @@ function SortableIndicatorItem({
       style={style}
       className={`p-4 bg-white border border-slate-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${isDragging ? 'opacity-70' : ''}`}
     >
-      <div className="flex items-center gap-2 text-slate-400 touch-none p-2" {...attributes} {...listeners}>
+      <button
+        type="button"
+        className="flex items-center gap-2 text-slate-400 touch-none rounded-lg p-2 hover:bg-slate-50"
+        aria-label={`拖动排序 ${indicator.name}`}
+        {...attributes}
+        {...listeners}
+      >
         <GripVertical size={18} />
-      </div>
+      </button>
       {editingId === indicator.id ? (
         <div className="flex-1 grid grid-cols-1 sm:grid-cols-6 gap-2">
           <input

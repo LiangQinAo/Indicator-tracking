@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Indicator, MedicalRecord } from '../types';
+import { EventMarker, Indicator, MedicalRecord } from '../types';
 import { v4 as uuidv4 } from 'uuid';
 import { useDropzone } from 'react-dropzone';
 import { UploadCloud, Loader2, AlertCircle, X, FileText, Info, Trash2, RotateCw } from 'lucide-react';
@@ -7,9 +7,11 @@ import { UploadCloud, Loader2, AlertCircle, X, FileText, Info, Trash2, RotateCw 
 interface AddRecordProps {
   records: MedicalRecord[];
   indicators: Indicator[];
+  markers: EventMarker[];
   onAdd: (record: MedicalRecord) => void;
   onUpdate: (record: MedicalRecord) => void;
   onAddIndicator: (indicator: Indicator) => void;
+  onAddMarker: (marker: EventMarker) => void;
 }
 
 interface AiJobResult {
@@ -42,11 +44,13 @@ interface PendingFile {
   isPdf: boolean;
 }
 
-export function AddRecord({ records, indicators, onAdd, onUpdate, onAddIndicator }: AddRecordProps) {
+export function AddRecord({ records, indicators, markers, onAdd, onUpdate, onAddIndicator, onAddMarker }: AddRecordProps) {
   const [mode, setMode] = useState<'manual' | 'ai'>('manual');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [values, setValues] = useState<Record<string, string>>({});
   const [notes, setNotes] = useState('');
+  const [markerTitle, setMarkerTitle] = useState('');
+  const [markerNotes, setMarkerNotes] = useState('');
 
   const [jobs, setJobs] = useState<AiJob[]>([]);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -56,14 +60,28 @@ export function AddRecord({ records, indicators, onAdd, onUpdate, onAddIndicator
   const [submitting, setSubmitting] = useState(false);
   const [bulkSaving, setBulkSaving] = useState(false);
   const [savedExpanded, setSavedExpanded] = useState(false);
+  const [jobsRefreshing, setJobsRefreshing] = useState(false);
 
   const listIndicators = indicators.filter(i => i.isActive !== false && i.visibleInList !== false);
+  const latestMarker = useMemo(() => {
+    const datedMarkers = markers.filter(marker => marker.date);
+    return datedMarkers.sort((a, b) => b.date.localeCompare(a.date))[0] || null;
+  }, [markers]);
 
-  const loadJobs = useCallback(async () => {
-    const res = await fetch('/api/ai-jobs');
-    if (res.ok) {
-      const data = await res.json();
-      setJobs(data);
+  const loadJobs = useCallback(async (showRefreshing = false) => {
+    if (showRefreshing) {
+      setJobsRefreshing(true);
+    }
+    try {
+      const res = await fetch('/api/ai-jobs');
+      if (res.ok) {
+        const data = await res.json();
+        setJobs(data);
+      }
+    } finally {
+      if (showRefreshing) {
+        setJobsRefreshing(false);
+      }
     }
   }, []);
 
@@ -75,6 +93,7 @@ export function AddRecord({ records, indicators, onAdd, onUpdate, onAddIndicator
 
   const handleManualSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setUploadError(null);
 
     const parsedValues: Record<string, number> = {};
     Object.entries(values).forEach(([key, val]) => {
@@ -97,6 +116,24 @@ export function AddRecord({ records, indicators, onAdd, onUpdate, onAddIndicator
 
     setValues({});
     setNotes('');
+  };
+
+  const handleAddMarker = () => {
+    const title = markerTitle.trim();
+    if (!title) {
+      setUploadError('请输入事件标题');
+      return;
+    }
+
+    setUploadError(null);
+    onAddMarker({
+      id: uuidv4(),
+      date,
+      title,
+      notes: markerNotes.trim() || undefined
+    });
+    setMarkerTitle('');
+    setMarkerNotes('');
   };
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
@@ -181,7 +218,8 @@ export function AddRecord({ records, indicators, onAdd, onUpdate, onAddIndicator
         onUpdate({
           ...existing,
           date: job.result.date,
-          values: mergedValues
+          values: mergedValues,
+          notes: existing.notes
         });
       } else {
         onAdd({
@@ -235,7 +273,8 @@ export function AddRecord({ records, indicators, onAdd, onUpdate, onAddIndicator
     onUpdate({
       ...existing,
       date: job.result.date,
-      values: mergedValues
+      values: mergedValues,
+      notes: existing.notes
     });
     await resolveJob(job.id, 'saved');
   };
@@ -458,15 +497,26 @@ export function AddRecord({ records, indicators, onAdd, onUpdate, onAddIndicator
 
                 return (
                   <>
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between gap-2">
                       <div className="text-sm font-medium text-slate-700">识别任务</div>
-                      <button
-                        className="px-3 py-1.5 text-xs rounded-lg bg-blue-600 text-white disabled:opacity-50"
-                        disabled={bulkSaving || savableJobs.length === 0}
-                        onClick={() => handleBulkSave(savableJobs)}
-                      >
-                        {bulkSaving ? '保存中...' : '全部保存'}
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          className="inline-flex items-center justify-center rounded-lg border border-slate-200 bg-white p-2 text-slate-500 transition hover:bg-slate-50 hover:text-blue-600 disabled:opacity-50"
+                          disabled={jobsRefreshing}
+                          onClick={() => loadJobs(true)}
+                          title="刷新任务"
+                          type="button"
+                        >
+                          <RotateCw size={16} className={jobsRefreshing ? 'animate-spin' : ''} />
+                        </button>
+                        <button
+                          className="px-3 py-1.5 text-xs rounded-lg bg-blue-600 text-white disabled:opacity-50"
+                          disabled={bulkSaving || savableJobs.length === 0}
+                          onClick={() => handleBulkSave(savableJobs)}
+                        >
+                          {bulkSaving ? '保存中...' : '全部保存'}
+                        </button>
+                      </div>
                     </div>
 
                     {activeJobs.length === 0 && (
@@ -624,6 +674,49 @@ export function AddRecord({ records, indicators, onAdd, onUpdate, onAddIndicator
                 onChange={(e) => setDate(e.target.value)}
                 className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
               />
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-medium text-slate-700">事件标记</h3>
+                  <p className="mt-1 text-xs text-slate-500">可单独记录症状、治疗或其他时间点，不需要填写化验值。</p>
+                </div>
+                {latestMarker && (
+                  <div className="text-right text-xs text-slate-400">
+                    <div>最近事件</div>
+                    <div className="mt-1 text-slate-500">{latestMarker.date}</div>
+                  </div>
+                )}
+              </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="sm:col-span-2">
+                  <label className="block text-sm font-medium text-slate-700 mb-2">事件标题</label>
+                  <input
+                    value={markerTitle}
+                    onChange={(e) => setMarkerTitle(e.target.value)}
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                    placeholder="例如：开始服药、出现发热、完成复查"
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="block text-sm font-medium text-slate-700 mb-2">事件备注 (可选)</label>
+                  <textarea
+                    value={markerNotes}
+                    onChange={(e) => setMarkerNotes(e.target.value)}
+                    rows={2}
+                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all resize-none"
+                    placeholder="补充背景信息，保存后将作为事件标记展示"
+                  />
+                </div>
+              </div>
+              <button
+                type="button"
+                className="w-full py-2.5 rounded-xl border border-slate-200 bg-white text-slate-700 font-medium hover:bg-slate-100 transition-colors"
+                onClick={handleAddMarker}
+              >
+                保存事件标记
+              </button>
             </div>
 
             <div className="space-y-4">
