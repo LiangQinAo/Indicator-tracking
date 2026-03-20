@@ -112,7 +112,7 @@ export function RecordHistory({ records, indicators, markers, onRefresh, isRefre
   }
 
   return (
-    <div className="flex flex-1 flex-col space-y-4 md:min-h-0 md:overflow-hidden">
+    <div className="flex flex-col space-y-4 md:min-h-0 md:flex-1 md:overflow-hidden">
       <div className="flex shrink-0 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h2 className="text-xl font-bold text-slate-800">历史记录</h2>
@@ -143,7 +143,7 @@ export function RecordHistory({ records, indicators, markers, onRefresh, isRefre
         </div>
       </div>
 
-      <div className="flex flex-1 flex-col overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm md:min-h-0">
+      <div className="flex flex-col overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm md:min-h-0 md:flex-1">
         <div className="border-b border-slate-100 bg-slate-50/80 px-4 py-3 text-xs text-slate-500 backdrop-blur">
           当前显示 {listIndicators.length} 个指标列。"所有已使用指标" 会包含历史记录中出现过数值的隐藏指标，但不会展开从未使用的停用字段。
         </div>
