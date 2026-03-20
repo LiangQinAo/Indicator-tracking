@@ -43,30 +43,30 @@ export function RecordHistory({ records, indicators, onUpdate, onDelete }: Recor
   }
 
   return (
-    <div className="space-y-4 flex flex-col flex-1 min-h-0">
-      <h2 className="text-xl font-bold text-slate-800 mb-6">历史记录</h2>
+    <div className="flex min-h-0 flex-1 flex-col space-y-4 overflow-hidden">
+      <h2 className="mb-2 shrink-0 text-xl font-bold text-slate-800">历史记录</h2>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 flex flex-col flex-1 min-h-0">
-        <div className="overflow-x-auto overflow-y-visible md:overflow-auto md:flex-1 md:min-h-0">
-          <table className="w-full min-w-max border-separate border-spacing-0 text-sm text-left">
-            <thead className="text-slate-600 font-medium border-b border-slate-200">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
+        <div className="min-h-0 flex-1 overflow-auto overscroll-contain pb-6 md:pb-0">
+          <table className="w-full min-w-max border-separate border-spacing-0 text-left text-sm">
+            <thead className="text-slate-600 font-medium">
               <tr>
-                <th className="px-2 sm:px-3 py-3 whitespace-nowrap sticky top-0 left-0 z-20 bg-slate-50 shadow-[0_1px_0_0_rgb(226_232_240),1px_0_0_0_rgb(226_232_240)]">日期</th>
+                <th className="sticky top-0 left-0 z-30 whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-3 shadow-[0_1px_0_0_rgb(226_232_240),1px_0_0_0_rgb(226_232_240)] sm:px-3">日期</th>
                 {listIndicators.map(ind => (
-                  <th key={ind.id} className="px-2 sm:px-3 py-3 whitespace-nowrap sticky top-0 z-10 bg-slate-50 shadow-[0_1px_0_0_rgb(226_232_240)]" title={ind.name}>
-                    {ind.shortName || ind.name} 
+                  <th key={ind.id} className="sticky top-0 z-20 whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-3 shadow-[0_1px_0_0_rgb(226_232_240)] sm:px-3" title={ind.name}>
+                    {ind.shortName || ind.name}
                     <br />
-                    <span className="text-xs text-slate-400 font-normal">({ind.minNormal + '-' +  ind.maxNormal})</span>
+                    <span className="text-xs font-normal text-slate-400">({ind.minNormal + '-' +  ind.maxNormal})</span>
                   </th>
                 ))}
-                <th className="px-2 sm:px-3 py-3 whitespace-nowrap sticky top-0 z-10 bg-slate-50 shadow-[0_1px_0_0_rgb(226_232_240)]">备注</th>
-                <th className="px-2 sm:px-3 py-3 whitespace-nowrap text-right sticky top-0 z-10 bg-slate-50 shadow-[0_1px_0_0_rgb(226_232_240)]">操作</th>
+                <th className="sticky top-0 z-20 whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-3 shadow-[0_1px_0_0_rgb(226_232_240)] sm:px-3">备注</th>
+                <th className="sticky top-0 z-20 whitespace-nowrap border-b border-slate-200 bg-slate-50 px-2 py-3 text-right shadow-[0_1px_0_0_rgb(226_232_240)] sm:px-3">操作</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody>
               {sortedRecords.map(record => (
-                <tr key={record.id} className="group hover:bg-slate-50 transition-colors">
-                  <td className="px-2 sm:px-3 py-3 whitespace-nowrap sticky left-0 z-10 bg-white shadow-[1px_0_0_0_rgb(241_245_249)] group-hover:bg-slate-50">
+                <tr key={record.id} className="group transition-colors hover:bg-slate-50">
+                  <td className="sticky left-0 z-10 whitespace-nowrap border-b border-slate-100 bg-white px-2 py-3 shadow-[1px_0_0_0_rgb(241_245_249)] group-hover:bg-slate-50 sm:px-3">
                     {editingId === record.id ? (
                       <input
                         type="date"
@@ -80,7 +80,7 @@ export function RecordHistory({ records, indicators, onUpdate, onDelete }: Recor
                   </td>
                   
                   {listIndicators.map(ind => (
-                    <td key={ind.id} className="font-bold px-2 sm:px-3 py-3 whitespace-nowrap">
+                    <td key={ind.id} className="whitespace-nowrap border-b border-slate-100 px-2 py-3 font-bold sm:px-3">
                       {editingId === record.id ? (
                         <input
                           type="number"
@@ -109,7 +109,7 @@ export function RecordHistory({ records, indicators, onUpdate, onDelete }: Recor
                     </td>
                   ))}
                   
-                  <td className="px-3 sm:px-4 py-3 min-w-[120px]">
+                  <td className="min-w-[120px] border-b border-slate-100 px-3 py-3 sm:px-4">
                     {editingId === record.id ? (
                       <input
                         type="text"
@@ -125,7 +125,7 @@ export function RecordHistory({ records, indicators, onUpdate, onDelete }: Recor
                   )}
                   </td>
                   
-                  <td className="px-3 sm:px-4 py-3 whitespace-nowrap text-right">
+                  <td className="whitespace-nowrap border-b border-slate-100 px-3 py-3 text-right sm:px-4">
                     {editingId === record.id ? (
                       <div className="flex items-center justify-end gap-2">
                         <button onClick={handleSave} className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded transition-colors" title="保存">

@@ -55,21 +55,21 @@ export function Layout({ children }: LayoutProps) {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-y-auto pb-[calc(env(safe-area-inset-bottom)+5rem)] md:pb-0 flex flex-col">
-        <div className="max-w-5xl mx-auto p-4 md:p-8 w-full md:flex md:flex-col md:min-h-full">
+      <main className="flex min-h-0 flex-1 flex-col overflow-y-auto pb-[calc(env(safe-area-inset-bottom)+5rem)] md:pb-0">
+        <div className="mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col p-4 md:p-8">
           {/* Mobile Header */}
-          <header className="md:hidden mb-6 flex items-center gap-2">
+          <header className="mb-6 flex shrink-0 items-center gap-2 md:hidden">
             <LineChart className="text-blue-600" />
             <h1 className="text-xl font-bold text-slate-800">指标追踪</h1>
           </header>
-          <div className="md:flex-1 md:min-h-0 md:flex md:flex-col">
+          <div className="flex min-h-0 flex-1 flex-col">
             {children}
           </div>
         </div>
       </main>
 
       {/* Mobile Bottom Nav */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 flex justify-around items-center pb-safe">
+      <nav className="fixed bottom-0 left-0 right-0 z-40 flex items-center justify-around border-t border-slate-200 bg-white pb-safe md:hidden">
         {navItems.map((item) => {
           const Icon = item.icon;
           return (
