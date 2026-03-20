@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { EventMarker, Indicator, MedicalRecord } from '../types';
 import { v4 as uuidv4 } from 'uuid';
 import { useDropzone } from 'react-dropzone';
-import { UploadCloud, Loader2, AlertCircle, X, FileText, Info, Trash2, RotateCw } from 'lucide-react';
+import { UploadCloud, Loader2, AlertCircle, X, FileText, Info, Trash2, RotateCw, Pencil } from 'lucide-react';
 
 interface AddRecordProps {
   records: MedicalRecord[];
@@ -12,6 +12,8 @@ interface AddRecordProps {
   onUpdate: (record: MedicalRecord) => void;
   onAddIndicator: (indicator: Indicator) => void;
   onAddMarker: (marker: EventMarker) => void;
+  onUpdateMarker: (marker: EventMarker) => void;
+  onDeleteMarker: (id: string) => void;
 }
 
 interface AiJobResult {
@@ -44,13 +46,24 @@ interface PendingFile {
   isPdf: boolean;
 }
 
-export function AddRecord({ records, indicators, markers, onAdd, onUpdate, onAddIndicator, onAddMarker }: AddRecordProps) {
+export function AddRecord({
+  records,
+  indicators,
+  markers,
+  onAdd,
+  onUpdate,
+  onAddIndicator,
+  onAddMarker,
+  onUpdateMarker,
+  onDeleteMarker,
+}: AddRecordProps) {
   const [mode, setMode] = useState<'manual' | 'ai'>('manual');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [values, setValues] = useState<Record<string, string>>({});
   const [notes, setNotes] = useState('');
   const [markerTitle, setMarkerTitle] = useState('');
   const [markerNotes, setMarkerNotes] = useState('');
+  const [editingMarkerId, setEditingMarkerId] = useState<string | null>(null);
 
   const [jobs, setJobs] = useState<AiJob[]>([]);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -63,10 +76,37 @@ export function AddRecord({ records, indicators, markers, onAdd, onUpdate, onAdd
   const [jobsRefreshing, setJobsRefreshing] = useState(false);
 
   const listIndicators = indicators.filter(i => i.isActive !== false && i.visibleInList !== false);
+
   const latestMarker = useMemo(() => {
     const datedMarkers = markers.filter(marker => marker.date);
     return datedMarkers.sort((a, b) => b.date.localeCompare(a.date))[0] || null;
   }, [markers]);
+
+  const sortedMarkers = useMemo(() => {
+    return [...markers].sort((a, b) => {
+      const dateDiff = b.date.localeCompare(a.date);
+      if (dateDiff !== 0) return dateDiff;
+      return (b.updatedAt || b.createdAt || '').localeCompare(a.updatedAt || a.createdAt || '');
+    });
+  }, [markers]);
+
+  const sameDayMarkers = useMemo(() => {
+    return sortedMarkers.filter(marker => marker.date === date);
+  }, [date, sortedMarkers]);
+
+  const resetMarkerForm = useCallback(() => {
+    setMarkerTitle('');
+    setMarkerNotes('');
+    setEditingMarkerId(null);
+  }, []);
+
+  const loadMarkerIntoForm = useCallback((marker: EventMarker) => {
+    setDate(marker.date);
+    setMarkerTitle(marker.title);
+    setMarkerNotes(marker.notes || '');
+    setEditingMarkerId(marker.id);
+    setUploadError(null);
+  }, []);
 
   const loadJobs = useCallback(async (showRefreshing = false) => {
     if (showRefreshing) {
@@ -111,14 +151,14 @@ export function AddRecord({ records, indicators, markers, onAdd, onUpdate, onAdd
       id: uuidv4(),
       date,
       values: parsedValues,
-      notes
+      notes,
     });
 
     setValues({});
     setNotes('');
   };
 
-  const handleAddMarker = () => {
+  const handleSaveMarker = () => {
     const title = markerTitle.trim();
     if (!title) {
       setUploadError('请输入事件标题');
@@ -126,14 +166,29 @@ export function AddRecord({ records, indicators, markers, onAdd, onUpdate, onAdd
     }
 
     setUploadError(null);
-    onAddMarker({
-      id: uuidv4(),
+
+    const payload: EventMarker = {
+      id: editingMarkerId || uuidv4(),
       date,
       title,
-      notes: markerNotes.trim() || undefined
-    });
-    setMarkerTitle('');
-    setMarkerNotes('');
+      notes: markerNotes.trim() || undefined,
+    };
+
+    if (editingMarkerId) {
+      onUpdateMarker(payload);
+    } else {
+      onAddMarker(payload);
+    }
+
+    resetMarkerForm();
+  };
+
+  const handleDeleteMarker = (id: string) => {
+    if (!window.confirm('确定要删除这个事件标记吗？')) return;
+    onDeleteMarker(id);
+    if (editingMarkerId === id) {
+      resetMarkerForm();
+    }
   };
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
@@ -145,21 +200,21 @@ export function AddRecord({ records, indicators, markers, onAdd, onUpdate, onAdd
       id: uuidv4(),
       file,
       previewUrl: file.type.includes('pdf') ? undefined : URL.createObjectURL(file),
-      isPdf: file.type.includes('pdf')
+      isPdf: file.type.includes('pdf'),
     }));
     setPendingFiles(prev => [...prev, ...newItems]);
-  }, [loadJobs]);
+  }, []);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
-    accept: { 'image/*': ['.jpeg', '.jpg', '.png'], 'application/pdf': ['.pdf'] }
+    accept: { 'image/*': ['.jpeg', '.jpg', '.png'], 'application/pdf': ['.pdf'] },
   } as any);
 
   const resolveJob = async (id: string, status: 'saved' | 'ignored') => {
     await fetch(`/api/ai-jobs/${id}/resolve`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status })
+      body: JSON.stringify({ status }),
     });
     loadJobs();
   };
@@ -219,14 +274,14 @@ export function AddRecord({ records, indicators, markers, onAdd, onUpdate, onAdd
           ...existing,
           date: job.result.date,
           values: mergedValues,
-          notes: existing.notes
+          notes: existing.notes,
         });
       } else {
         onAdd({
           id: uuidv4(),
           date: job.result.date,
           values: job.result.values,
-          notes: 'AI 识别导入'
+          notes: 'AI 识别导入',
         });
       }
     } else {
@@ -234,7 +289,7 @@ export function AddRecord({ records, indicators, markers, onAdd, onUpdate, onAdd
         id: uuidv4(),
         date: job.result.date,
         values: job.result.values,
-        notes: 'AI 识别导入'
+        notes: 'AI 识别导入',
       });
     }
     await resolveJob(job.id, 'saved');
@@ -263,22 +318,6 @@ export function AddRecord({ records, indicators, markers, onAdd, onUpdate, onAdd
     }
   };
 
-  const overwriteJobRecord = async (job: AiJob) => {
-    if (!job.result || !job.conflict) return;
-    const existing = records.find(r => r.id === job.conflict?.recordId);
-    if (!existing) {
-      return;
-    }
-    const mergedValues = { ...existing.values, ...job.result.values };
-    onUpdate({
-      ...existing,
-      date: job.result.date,
-      values: mergedValues,
-      notes: existing.notes
-    });
-    await resolveJob(job.id, 'saved');
-  };
-
   const indicatorNameMap = useMemo(() => {
     const map = new Map<string, string>();
     indicators.forEach(i => map.set(i.id, i.shortName || i.name));
@@ -300,31 +339,31 @@ export function AddRecord({ records, indicators, markers, onAdd, onUpdate, onAdd
         onClick={() => setDetailJob(null)}
       >
         <div
-          className="relative max-w-5xl w-full max-h-full bg-white rounded-lg overflow-hidden"
+          className="relative max-h-full w-full max-w-5xl overflow-hidden rounded-lg bg-white"
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200">
+          <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
             <span className="font-medium text-slate-800">识别详情</span>
             <button className="text-slate-500 hover:text-slate-700" onClick={() => setDetailJob(null)}>
               <X size={18} />
             </button>
           </div>
-          <div className="p-4 space-y-4 max-h-[80vh] overflow-y-auto">
+          <div className="max-h-[80vh] space-y-4 overflow-y-auto p-4">
             <div className="text-sm text-slate-600">日期：{detailJob.result.date}</div>
 
-            <div className="bg-slate-50 rounded-lg p-3">
+            <div className="rounded-lg bg-slate-50 p-3">
               {isPdf ? (
-                <iframe src={fileUrl} className="w-full h-[50vh]" title="ai-preview" />
+                <iframe src={fileUrl} className="h-[50vh] w-full" title="ai-preview" />
               ) : (
-                <img src={fileUrl} alt="ai-preview" className="w-full max-h-[50vh] object-contain" />
+                <img src={fileUrl} alt="ai-preview" className="max-h-[50vh] w-full object-contain" />
               )}
             </div>
 
             <div>
-              <h4 className="font-medium text-slate-700 mb-2">识别指标</h4>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+              <h4 className="mb-2 font-medium text-slate-700">识别指标</h4>
+              <div className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
                 {valuesList.map(([key, value]) => (
-                  <div key={key} className="flex items-center justify-between p-2 bg-slate-50 rounded-lg">
+                  <div key={key} className="flex items-center justify-between rounded-lg bg-slate-50 p-2">
                     <span className="text-slate-600">{indicatorNameMap.get(key) || key}</span>
                     <span className="font-medium text-slate-800">{value}</span>
                   </div>
@@ -334,7 +373,7 @@ export function AddRecord({ records, indicators, markers, onAdd, onUpdate, onAdd
 
             {detailJob.result.newIndicators && detailJob.result.newIndicators.length > 0 && (
               <div>
-                <h4 className="font-medium text-slate-700 mb-2">新指标</h4>
+                <h4 className="mb-2 font-medium text-slate-700">新指标</h4>
                 <div className="space-y-1 text-sm">
                   {detailJob.result.newIndicators.map(ind => (
                     <div key={ind.id} className="text-slate-600">{ind.name} ({ind.unit || '无单位'})</div>
@@ -344,8 +383,8 @@ export function AddRecord({ records, indicators, markers, onAdd, onUpdate, onAdd
             )}
 
             {detailJob.status === 'conflict' && (
-              <div className="border border-red-100 bg-red-50 rounded-lg p-3">
-                <div className="flex items-center gap-2 text-red-600 mb-2">
+              <div className="rounded-lg border border-red-100 bg-red-50 p-3">
+                <div className="mb-2 flex items-center gap-2 text-red-600">
                   <AlertCircle size={16} />
                   <span className="font-medium">与已有记录冲突</span>
                 </div>
@@ -361,9 +400,9 @@ export function AddRecord({ records, indicators, markers, onAdd, onUpdate, onAdd
                 ) : (
                   <div className="text-sm text-red-600">同日期已有记录，已取消合并。</div>
                 )}
-                <div className="flex gap-2 mt-3">
+                <div className="mt-3 flex gap-2">
                   <button
-                    className="px-3 py-1.5 bg-red-600 text-white rounded-lg text-sm"
+                    className="rounded-lg bg-red-600 px-3 py-1.5 text-sm text-white"
                     onClick={() => { handleCancelJob(detailJob.id); setDetailJob(null); }}
                   >
                     删除任务
@@ -378,7 +417,7 @@ export function AddRecord({ records, indicators, markers, onAdd, onUpdate, onAdd
                   <div className="text-xs text-slate-500">将合并到同日期已有记录</div>
                 )}
                 <button
-                  className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm"
+                  className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm text-white"
                   onClick={() => { saveJobRecord(detailJob); setDetailJob(null); }}
                 >
                   {detailJob.result.mergeRecordId ? '合并保存' : '保存记录'}
@@ -392,11 +431,11 @@ export function AddRecord({ records, indicators, markers, onAdd, onUpdate, onAdd
   };
 
   return (
-    <div className="space-y-6 max-w-2xl mx-auto">
-      <div className="flex bg-slate-100 p-1 rounded-xl w-full">
+    <div className="mx-auto max-w-2xl space-y-6">
+      <div className="flex w-full rounded-xl bg-slate-100 p-1">
         <button
           onClick={() => setMode('manual')}
-          className={`flex-1 py-2.5 text-sm font-medium rounded-lg transition-colors ${
+          className={`flex-1 rounded-lg py-2.5 text-sm font-medium transition-colors ${
             mode === 'manual' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'
           }`}
         >
@@ -404,7 +443,7 @@ export function AddRecord({ records, indicators, markers, onAdd, onUpdate, onAdd
         </button>
         <button
           onClick={() => setMode('ai')}
-          className={`flex-1 py-2.5 text-sm font-medium rounded-lg transition-colors ${
+          className={`flex-1 rounded-lg py-2.5 text-sm font-medium transition-colors ${
             mode === 'ai' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-600 hover:text-slate-900'
           }`}
         >
@@ -412,23 +451,23 @@ export function AddRecord({ records, indicators, markers, onAdd, onUpdate, onAdd
         </button>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
+      <div className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm">
         {mode === 'ai' ? (
           <div className="space-y-6">
             <div
               {...getRootProps()}
-              className={`border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-colors ${
+              className={`cursor-pointer rounded-2xl border-2 border-dashed p-8 text-center transition-colors ${
                 isDragActive ? 'border-blue-500 bg-blue-50' : 'border-slate-300 hover:border-blue-400 hover:bg-slate-50'
               }`}
             >
               <input {...getInputProps()} />
               <div className="flex flex-col items-center justify-center gap-3">
-                <div className="w-14 h-14 bg-blue-50 rounded-full flex items-center justify-center text-blue-600">
+                <div className="flex h-14 w-14 items-center justify-center rounded-full bg-blue-50 text-blue-600">
                   <UploadCloud size={28} />
                 </div>
                 <div>
-                  <p className="text-slate-700 font-medium">点击或拖拽化验单图片 / PDF 至此</p>
-                  <p className="text-slate-500 text-sm mt-1">识别任务将在后台处理，关闭页面也不会中断</p>
+                  <p className="font-medium text-slate-700">点击或拖拽化验单图片 / PDF 至此</p>
+                  <p className="mt-1 text-sm text-slate-500">识别任务将在后台处理，关闭页面也不会中断</p>
                 </div>
               </div>
             </div>
@@ -446,20 +485,20 @@ export function AddRecord({ records, indicators, markers, onAdd, onUpdate, onAdd
                 </div>
                 <div className="space-y-2">
                   {pendingFiles.map(item => (
-                    <div key={item.id} className="flex items-center gap-3 p-3 border border-slate-100 rounded-xl bg-slate-50">
+                    <div key={item.id} className="flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50 p-3">
                       {item.isPdf ? (
-                        <div className="w-12 h-12 bg-white border border-slate-200 rounded-lg flex items-center justify-center text-slate-500">
+                        <div className="flex h-12 w-12 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500">
                           <FileText size={18} />
                         </div>
                       ) : (
                         <img
                           src={item.previewUrl}
                           alt="preview"
-                          className="w-12 h-12 object-cover rounded-lg border border-slate-200 cursor-pointer"
+                          className="h-12 w-12 cursor-pointer rounded-lg border border-slate-200 object-cover"
                           onClick={() => setPreviewUrl(item.previewUrl || null)}
                         />
                       )}
-                      <div className="flex-1 min-w-0 text-sm text-slate-700 truncate">
+                      <div className="min-w-0 flex-1 truncate text-sm text-slate-700">
                         {item.file.name}
                       </div>
                       <button
@@ -473,7 +512,7 @@ export function AddRecord({ records, indicators, markers, onAdd, onUpdate, onAdd
                   ))}
                 </div>
                 <button
-                  className="w-full py-2.5 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors disabled:opacity-50"
+                  className="w-full rounded-xl bg-blue-600 py-2.5 font-medium text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
                   onClick={submitPendingFiles}
                   disabled={submitting}
                 >
@@ -483,7 +522,7 @@ export function AddRecord({ records, indicators, markers, onAdd, onUpdate, onAdd
             )}
 
             {uploadError && (
-              <div className="flex items-center gap-2 text-red-600 bg-red-50 p-3 rounded-xl text-sm">
+              <div className="flex items-center gap-2 rounded-xl bg-red-50 p-3 text-sm text-red-600">
                 <AlertCircle size={16} />
                 {uploadError}
               </div>
@@ -510,7 +549,7 @@ export function AddRecord({ records, indicators, markers, onAdd, onUpdate, onAdd
                           <RotateCw size={16} className={jobsRefreshing ? 'animate-spin' : ''} />
                         </button>
                         <button
-                          className="px-3 py-1.5 text-xs rounded-lg bg-blue-600 text-white disabled:opacity-50"
+                          className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs text-white disabled:opacity-50"
                           disabled={bulkSaving || savableJobs.length === 0}
                           onClick={() => handleBulkSave(savableJobs)}
                         >
@@ -520,7 +559,7 @@ export function AddRecord({ records, indicators, markers, onAdd, onUpdate, onAdd
                     </div>
 
                     {activeJobs.length === 0 && (
-                      <div className="text-slate-500 text-sm">暂无识别任务</div>
+                      <div className="text-sm text-slate-500">暂无识别任务</div>
                     )}
 
                     {activeJobs.map(job => {
@@ -533,26 +572,26 @@ export function AddRecord({ records, indicators, markers, onAdd, onUpdate, onAdd
                         success: zeroItems ? '异常/0项' : '可保存',
                         conflict: '冲突待处理',
                         error: '识别失败',
-                        ignored: '已忽略'
+                        ignored: '已忽略',
                       }[job.status];
                       return (
-                        <div key={job.id} className="flex items-center gap-3 p-3 border border-slate-100 rounded-xl bg-slate-50">
+                        <div key={job.id} className="flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50 p-3">
                           {isPdf ? (
-                            <div className="w-14 h-14 bg-white border border-slate-200 rounded-lg flex items-center justify-center text-slate-500">
+                            <div className="flex h-14 w-14 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500">
                               <FileText size={20} />
                             </div>
                           ) : (
                             <img
                               src={fileUrl}
                               alt="preview"
-                              className="w-14 h-14 object-cover rounded-lg border border-slate-200 cursor-pointer"
+                              className="h-14 w-14 cursor-pointer rounded-lg border border-slate-200 object-cover"
                               onClick={() => setPreviewUrl(fileUrl)}
                             />
                           )}
-                          <div className="flex-1 min-w-0">
+                          <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2">
                               <span className="text-sm font-medium text-slate-800">{job.date || '待识别日期'}</span>
-                              <span className={`text-xs px-2 py-0.5 rounded-full ${
+                              <span className={`rounded-full px-2 py-0.5 text-xs ${
                                 job.status === 'conflict' ? 'bg-red-50 text-red-600' :
                                 job.status === 'error' || zeroItems ? 'bg-rose-50 text-rose-600' :
                                 job.status === 'success' ? 'bg-emerald-50 text-emerald-600' :
@@ -560,13 +599,13 @@ export function AddRecord({ records, indicators, markers, onAdd, onUpdate, onAdd
                                 'bg-slate-100 text-slate-500'
                               }`}>{statusLabel}</span>
                             </div>
-                            <div className="text-xs text-slate-500 mt-1">
+                            <div className="mt-1 text-xs text-slate-500">
                               {zeroItems ? '识别到 0 项指标（异常）' : job.result?.values ? `识别 ${Object.keys(job.result.values).length} 项指标` : job.error || '等待处理...'}
                             </div>
                           </div>
 
                           {job.status === 'processing' && (
-                            <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
+                            <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
                           )}
 
                           <div className="flex items-center gap-1">
@@ -582,7 +621,7 @@ export function AddRecord({ records, indicators, markers, onAdd, onUpdate, onAdd
 
                             {job.status === 'success' && !zeroItems && (
                               <button
-                                className="px-2 py-1 text-xs rounded-lg border border-slate-200 text-slate-700 flex items-center gap-1"
+                                className="flex items-center gap-1 rounded-lg border border-slate-200 px-2 py-1 text-xs text-slate-700"
                                 onClick={() => setDetailJob(job)}
                               >
                                 <Info size={14} />
@@ -604,7 +643,7 @@ export function AddRecord({ records, indicators, markers, onAdd, onUpdate, onAdd
 
                     <div className="border-t border-slate-100 pt-2">
                       <button
-                        className="w-full flex items-center justify-between text-sm text-slate-600 hover:text-slate-800"
+                        className="flex w-full items-center justify-between text-sm text-slate-600 hover:text-slate-800"
                         onClick={() => setSavedExpanded(prev => !prev)}
                       >
                         <span>已保存（{savedJobs.length}）</span>
@@ -616,27 +655,27 @@ export function AddRecord({ records, indicators, markers, onAdd, onUpdate, onAdd
                             const fileUrl = `/api/ai-jobs/${job.id}/file`;
                             const isPdf = job.mime?.includes('pdf');
                             return (
-                              <div key={job.id} className="flex items-center gap-3 p-3 border border-slate-100 rounded-xl bg-white">
+                              <div key={job.id} className="flex items-center gap-3 rounded-xl border border-slate-100 bg-white p-3">
                                 {isPdf ? (
-                                  <div className="w-12 h-12 bg-white border border-slate-200 rounded-lg flex items-center justify-center text-slate-500">
+                                  <div className="flex h-12 w-12 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500">
                                     <FileText size={18} />
                                   </div>
                                 ) : (
                                   <img
                                     src={fileUrl}
                                     alt="preview"
-                                    className="w-12 h-12 object-cover rounded-lg border border-slate-200 cursor-pointer"
+                                    className="h-12 w-12 cursor-pointer rounded-lg border border-slate-200 object-cover"
                                     onClick={() => setPreviewUrl(fileUrl)}
                                   />
                                 )}
-                                <div className="flex-1 min-w-0">
+                                <div className="min-w-0 flex-1">
                                   <div className="text-sm font-medium text-slate-700">{job.date || '已保存记录'}</div>
-                                  <div className="text-xs text-slate-500 mt-0.5">
+                                  <div className="mt-0.5 text-xs text-slate-500">
                                     {job.result?.values ? `识别 ${Object.keys(job.result.values).length} 项指标` : '已保存'}
                                   </div>
                                 </div>
                                 <button
-                                  className="px-2 py-1 text-xs rounded-lg border border-slate-200 text-slate-700 flex items-center gap-1"
+                                  className="flex items-center gap-1 rounded-lg border border-slate-200 px-2 py-1 text-xs text-slate-700"
                                   onClick={() => setDetailJob(job)}
                                 >
                                   <Info size={14} />
@@ -655,7 +694,7 @@ export function AddRecord({ records, indicators, markers, onAdd, onUpdate, onAdd
                         </div>
                       )}
                       {savedExpanded && savedJobs.length === 0 && (
-                        <div className="text-xs text-slate-400 mt-2">暂无已保存任务</div>
+                        <div className="mt-2 text-xs text-slate-400">暂无已保存任务</div>
                       )}
                     </div>
                   </>
@@ -666,21 +705,21 @@ export function AddRecord({ records, indicators, markers, onAdd, onUpdate, onAdd
         ) : (
           <form onSubmit={handleManualSubmit} className="space-y-6">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">检查日期</label>
+              <label className="mb-2 block text-sm font-medium text-slate-700">检查日期</label>
               <input
                 type="date"
                 required
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
-                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                className="w-full rounded-xl border border-slate-200 px-4 py-2.5 outline-none transition-all focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
               />
             </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-4">
+            <div className="space-y-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <h3 className="text-sm font-medium text-slate-700">事件标记</h3>
-                  <p className="mt-1 text-xs text-slate-500">可单独记录症状、治疗或其他时间点，不需要填写化验值。</p>
+                  <p className="mt-1 text-xs text-slate-500">支持新增、编辑、删除。可单独记录症状、治疗或其他时间点，不需要填写化验值。</p>
                 </div>
                 {latestMarker && (
                   <div className="text-right text-xs text-slate-400">
@@ -689,43 +728,116 @@ export function AddRecord({ records, indicators, markers, onAdd, onUpdate, onAdd
                   </div>
                 )}
               </div>
+
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="sm:col-span-2">
-                  <label className="block text-sm font-medium text-slate-700 mb-2">事件标题</label>
+                  <label className="mb-2 block text-sm font-medium text-slate-700">事件标题</label>
                   <input
                     value={markerTitle}
                     onChange={(e) => setMarkerTitle(e.target.value)}
-                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 outline-none transition-all focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
                     placeholder="例如：开始服药、出现发热、完成复查"
                   />
                 </div>
                 <div className="sm:col-span-2">
-                  <label className="block text-sm font-medium text-slate-700 mb-2">事件备注 (可选)</label>
+                  <label className="mb-2 block text-sm font-medium text-slate-700">事件备注 (可选)</label>
                   <textarea
                     value={markerNotes}
                     onChange={(e) => setMarkerNotes(e.target.value)}
                     rows={2}
-                    className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all resize-none"
+                    className="w-full resize-none rounded-xl border border-slate-200 bg-white px-4 py-2.5 outline-none transition-all focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
                     placeholder="补充背景信息，保存后将作为事件标记展示"
                   />
                 </div>
               </div>
-              <button
-                type="button"
-                className="w-full py-2.5 rounded-xl border border-slate-200 bg-white text-slate-700 font-medium hover:bg-slate-100 transition-colors"
-                onClick={handleAddMarker}
-              >
-                保存事件标记
-              </button>
+
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  className="flex-1 rounded-xl border border-slate-200 bg-white py-2.5 font-medium text-slate-700 transition-colors hover:bg-slate-100"
+                  onClick={handleSaveMarker}
+                >
+                  {editingMarkerId ? '更新事件标记' : '保存事件标记'}
+                </button>
+                {editingMarkerId && (
+                  <button
+                    type="button"
+                    className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100"
+                    onClick={resetMarkerForm}
+                  >
+                    取消编辑
+                  </button>
+                )}
+              </div>
+
+              {sameDayMarkers.length > 0 && (
+                <div className="rounded-2xl border border-amber-200 bg-white p-3">
+                  <div className="text-xs font-medium text-amber-700">{date} 已有 {sameDayMarkers.length} 条事件</div>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {sameDayMarkers.map(marker => (
+                      <span key={marker.id} className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs text-amber-700">
+                        {marker.title}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-3">
+                <div className="text-sm font-medium text-slate-700">最近事件</div>
+                {sortedMarkers.length ? (
+                  <div className="space-y-2">
+                    {sortedMarkers.slice(0, 6).map(marker => (
+                      <div key={marker.id} className="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-500">{marker.date}</span>
+                              <span className="font-medium text-slate-800">{marker.title}</span>
+                            </div>
+                            {marker.notes ? (
+                              <p className="mt-2 text-sm leading-6 text-slate-500">{marker.notes}</p>
+                            ) : (
+                              <p className="mt-2 text-sm text-slate-400">未填写备注</p>
+                            )}
+                          </div>
+                          <div className="flex shrink-0 items-center gap-1">
+                            <button
+                              type="button"
+                              className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-blue-600"
+                              title="编辑事件"
+                              onClick={() => loadMarkerIntoForm(marker)}
+                            >
+                              <Pencil size={16} />
+                            </button>
+                            <button
+                              type="button"
+                              className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-500"
+                              title="删除事件"
+                              onClick={() => handleDeleteMarker(marker.id)}
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-6 text-center text-sm text-slate-500">
+                    还没有事件标记，保存后会同步出现在概览、趋势图和历史记录中。
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="space-y-4">
-              <h3 className="text-sm font-medium text-slate-700 border-b border-slate-100 pb-2">指标数据</h3>
-              <div className="grid grid-cols-2 sm:grid-cols-2 gap-4">
+              <h3 className="border-b border-slate-100 pb-2 text-sm font-medium text-slate-700">指标数据</h3>
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-2">
                 {listIndicators.map(ind => (
                   <div key={ind.id}>
                     <label
-                      className="block text-xs text-slate-500 mb-1 truncate"
+                      className="mb-1 block truncate text-xs text-slate-500"
                       title={ind.name}
                     >
                       {ind.shortName || ind.name}
@@ -736,11 +848,11 @@ export function AddRecord({ records, indicators, markers, onAdd, onUpdate, onAdd
                         step="any"
                         value={values[ind.id] || ''}
                         onChange={(e) => setValues({ ...values, [ind.id]: e.target.value })}
-                        className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all pr-16"
+                        className="w-full rounded-xl border border-slate-200 px-4 py-2.5 pr-16 outline-none transition-all focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
                         placeholder="留空表示未查"
                       />
                       <span
-                        className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-slate-400 max-w-[4rem] truncate text-right"
+                        className="absolute right-4 top-1/2 max-w-[4rem] -translate-y-1/2 truncate text-right text-xs text-slate-400"
                         title={ind.unit}
                       >
                         {ind.unit}
@@ -752,25 +864,25 @@ export function AddRecord({ records, indicators, markers, onAdd, onUpdate, onAdd
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">备注信息 (可选)</label>
+              <label className="mb-2 block text-sm font-medium text-slate-700">备注信息 (可选)</label>
               <textarea
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 rows={3}
-                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all resize-none"
+                className="w-full resize-none rounded-xl border border-slate-200 px-4 py-2.5 outline-none transition-all focus:border-blue-500 focus:ring-2 focus:ring-blue-500"
                 placeholder="例如：今天感觉有些乏力..."
               />
             </div>
 
             <button
               type="submit"
-              className="w-full py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors shadow-sm"
+              className="w-full rounded-xl bg-blue-600 py-3 font-medium text-white shadow-sm transition-colors hover:bg-blue-700"
             >
               保存记录
             </button>
 
             {uploadError && mode === 'manual' && (
-              <div className="flex items-center gap-2 text-red-600 bg-red-50 p-4 rounded-xl text-sm mt-4">
+              <div className="mt-4 flex items-center gap-2 rounded-xl bg-red-50 p-4 text-sm text-red-600">
                 <AlertCircle size={18} />
                 {uploadError}
               </div>
@@ -784,17 +896,17 @@ export function AddRecord({ records, indicators, markers, onAdd, onUpdate, onAdd
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
           onClick={() => setPreviewUrl(null)}
         >
-          <div className="relative max-w-4xl w-full max-h-full flex items-center justify-center">
+          <div className="relative flex max-h-full w-full max-w-4xl items-center justify-center">
             <button
               onClick={() => setPreviewUrl(null)}
-              className="absolute -top-12 right-0 text-white hover:text-slate-300 p-2"
+              className="absolute -top-12 right-0 p-2 text-white hover:text-slate-300"
             >
               <X size={32} />
             </button>
             <img
               src={previewUrl}
               alt="Enlarged preview"
-              className="max-w-full max-h-[85vh] object-contain rounded-lg"
+              className="max-h-[85vh] max-w-full rounded-lg object-contain"
               onClick={(e) => e.stopPropagation()}
             />
           </div>

@@ -12,7 +12,8 @@ import {
   ReferenceLine,
   Customized,
 } from 'recharts';
-import { CalendarDays, RefreshCw } from 'lucide-react';
+import { CalendarDays } from 'lucide-react';
+import { PageRefreshButton } from './PageRefreshButton';
 
 interface ChartsProps {
   records: MedicalRecord[];
@@ -44,34 +45,39 @@ function EventMarkerOverlay(props: any) {
   const xAxis = xAxisMap ? Object.values(xAxisMap)[0] as any : null;
   if (!xAxis || !offset || !markerGroups?.length) return null;
 
-  const topY = offset.top + 12;
+  const axisLabelY = offset.top + offset.height + (isMobile ? 22 : 26);
+  const tickY = offset.top + offset.height + 4;
 
   return (
     <g>
-      {markerGroups.map((group: MarkerGroup) => {
+      {markerGroups.map((group: MarkerGroup, index: number) => {
         const x = xAxis.scale?.(group.date);
         if (typeof x !== 'number' || Number.isNaN(x)) return null;
 
         const label = isMobile
           ? group.items.length > 1
-            ? `${group.items[0].title} +${group.items.length - 1}`
+            ? `${group.items[0].title}+${group.items.length - 1}`
             : group.items[0].title
           : group.items.length > 1
-            ? `${group.items[0].title} 等${group.items.length}项`
+            ? `${group.items[0].title} +${group.items.length - 1}`
             : group.items[0].title;
 
+        const truncatedLabel = label.length > (isMobile ? 7 : 10) ? `${label.slice(0, isMobile ? 6 : 9)}…` : label;
+        const labelY = axisLabelY + ((index % 2) * (isMobile ? 10 : 12));
+
         return (
-          <g key={group.date} transform={`translate(${x}, ${topY})`}>
-            <line y1={0} y2={18} stroke="#f59e0b" strokeDasharray="3 3" strokeWidth={1} opacity={0.7} />
-            <circle cy={-2} r={4} fill="#f59e0b" stroke="#fff" strokeWidth={2} />
+          <g key={group.date} transform={`translate(${x}, 0)`}>
+            <line y1={offset.top} y2={offset.top + offset.height} stroke="#f59e0b" strokeDasharray="3 3" strokeWidth={1} opacity={0.28} />
+            <line y1={tickY - 8} y2={tickY - 2} stroke="#f59e0b" strokeWidth={1.25} opacity={0.85} />
+            <circle cy={tickY - 9} r={2.5} fill="#f59e0b" stroke="#fff" strokeWidth={1.5} />
             <text
-              y={isMobile ? -10 : -12}
+              y={labelY}
               textAnchor="middle"
               fill="#b45309"
-              fontSize={isMobile ? 10 : 11}
+              fontSize={isMobile ? 9 : 10}
               fontWeight={600}
             >
-              {label.length > (isMobile ? 10 : 16) ? `${label.slice(0, isMobile ? 9 : 15)}…` : label}
+              {truncatedLabel}
             </text>
           </g>
         );
@@ -244,19 +250,12 @@ export function Charts({ records, indicators, markers, onRefresh, isRefreshing }
     return (
       <div className="space-y-6">
         <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
-          <div className="flex items-center justify-between gap-3 mb-4">
+          <div className="mb-4 flex items-center justify-between gap-3">
             <div>
               <h2 className="text-xl font-bold text-slate-800">指标趋势图</h2>
               <p className="mt-1 text-sm text-slate-500">查看指标趋势与事件时间点</p>
             </div>
-            <button
-              onClick={onRefresh}
-              disabled={isRefreshing}
-              className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <RefreshCw size={16} className={isRefreshing ? 'animate-spin' : ''} />
-              {isRefreshing ? '刷新中...' : '刷新'}
-            </button>
+            <PageRefreshButton onClick={onRefresh} isRefreshing={isRefreshing} />
           </div>
           <div className="flex flex-col items-center justify-center h-64 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
             <p className="text-slate-500">暂无数据可供分析</p>
@@ -275,17 +274,10 @@ export function Charts({ records, indicators, markers, onRefresh, isRefreshing }
             <p className="mt-1 text-sm text-slate-500">支持结合事件标记查看当前时间范围内的变化</p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 justify-end">
-            <button
-              onClick={onRefresh}
-              disabled={isRefreshing}
-              className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <RefreshCw size={16} className={isRefreshing ? 'animate-spin' : ''} />
-              {isRefreshing ? '刷新中...' : '刷新'}
-            </button>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <PageRefreshButton onClick={onRefresh} isRefreshing={isRefreshing} />
 
-            <div className="flex bg-slate-100 p-1 rounded-lg w-fit">
+            <div className="flex w-fit rounded-lg bg-slate-100 p-1">
               {[
                 { id: '7w', label: '近7天' },
                 { id: '1m', label: '近1月' },
@@ -370,9 +362,9 @@ export function Charts({ records, indicators, markers, onRefresh, isRefreshing }
         )}
 
         {activeIndicators.length > 0 && (
-          <div className="h-80 w-full mt-8">
+          <div className="mt-8 h-80 w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <RechartsLineChart data={filteredData} margin={{ top: markerGroups.length > 0 ? 34 : 10, right: 10, left: -20, bottom: 0 }}>
+              <RechartsLineChart data={filteredData} margin={{ top: 10, right: 10, left: -20, bottom: markerGroups.length > 0 ? (isMobile ? 38 : 42) : 6 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
                 <XAxis
                   dataKey="fullDate"

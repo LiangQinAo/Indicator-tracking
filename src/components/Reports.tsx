@@ -26,7 +26,7 @@ const secondaryButtonClassName =
 const primaryButtonClassName =
   'inline-flex items-center justify-center gap-2 rounded-2xl bg-blue-600 px-4 py-3 text-sm font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-300';
 const iconButtonClassName =
-  'inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50';
+  'inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600';
 
 const getDisplayTitle = (file: Pick<ReportFile, 'title' | 'original_name' | 'date'>) => {
   return file.title || file.original_name || file.date || '报告文件';
@@ -363,7 +363,7 @@ export function Reports() {
           </div>
           <div className="flex shrink-0 items-center gap-2">
             <button
-              className={`${secondaryButtonClassName} h-10 w-10 rounded-xl p-0`}
+              className={iconButtonClassName}
               onClick={handleRefresh}
               disabled={refreshing}
               title="刷新报告"

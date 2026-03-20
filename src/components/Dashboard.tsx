@@ -1,7 +1,8 @@
 import { useMemo } from 'react';
 import { Indicator, MedicalRecord, EventMarker } from '../types';
 import { format, parseISO } from 'date-fns';
-import { AlertCircle, ArrowDown, ArrowRight, ArrowUp, CalendarDays, CheckCircle2, RefreshCw } from 'lucide-react';
+import { AlertCircle, ArrowDown, ArrowRight, ArrowUp, CalendarDays, CheckCircle2 } from 'lucide-react';
+import { PageRefreshButton } from './PageRefreshButton';
 
 declare const __APP_VERSION__: string;
 
@@ -21,6 +22,12 @@ interface LatestChangeItem {
   previousValue: number;
   delta: number;
   direction: ChangeDirection;
+}
+
+interface LatestValueItem {
+  indicator: Indicator;
+  value: number;
+  abnormal: boolean;
 }
 
 const formatIndicatorRange = (indicator: Indicator) => {
@@ -46,11 +53,11 @@ const getChangeDirection = (delta: number): ChangeDirection => {
 const getChangeTone = (direction: ChangeDirection) => {
   switch (direction) {
     case 'up':
-      return 'text-rose-600 bg-rose-50 border-rose-100';
+      return 'border-rose-200 bg-rose-50 text-rose-700';
     case 'down':
-      return 'text-blue-600 bg-blue-50 border-blue-100';
+      return 'border-blue-200 bg-blue-50 text-blue-700';
     default:
-      return 'text-slate-500 bg-slate-50 border-slate-100';
+      return 'border-slate-200 bg-slate-50 text-slate-500';
   }
 };
 
@@ -75,6 +82,24 @@ export function Dashboard({ records, indicators, markers, onRefresh, isRefreshin
     () => indicators.filter(i => i.isActive !== false && i.visibleInList !== false),
     [indicators]
   );
+
+  const latestValueItems = useMemo(() => {
+    if (!latestRecord) return [];
+
+    return visibleSummaryIndicators
+      .map(indicator => {
+        const value = latestRecord.values[indicator.id];
+        if (value === undefined) return null;
+        return {
+          indicator,
+          value,
+          abnormal: isIndicatorAbnormal(indicator, value),
+        } satisfies LatestValueItem;
+      })
+      .filter((item): item is LatestValueItem => Boolean(item))
+      .sort((a, b) => Number(b.abnormal) - Number(a.abnormal))
+      .slice(0, 8);
+  }, [latestRecord, visibleSummaryIndicators]);
 
   const abnormalItems = useMemo(() => {
     if (!latestRecord) return [];
@@ -129,166 +154,161 @@ export function Dashboard({ records, indicators, markers, onRefresh, isRefreshin
     return `${date}：${items[0].title} 等 ${items.length} 条事件`;
   }, [markers]);
 
+  const recentMarkerCount = useMemo(() => {
+    const windowStart = Date.now() - 14 * 24 * 60 * 60 * 1000;
+    return markers.filter(marker => new Date(marker.date).getTime() >= windowStart).length;
+  }, [markers]);
+
   if (!records.length) {
     return (
-      <div className="space-y-6">
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
-          <div className="flex items-center justify-between gap-3 mb-4">
+      <div className="space-y-5">
+        <section className="overflow-hidden rounded-[28px] border border-slate-200 bg-gradient-to-br from-white via-white to-blue-50/70 p-5 shadow-sm md:p-6">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <h2 className="text-xl font-bold text-slate-800">概览</h2>
-              <p className="mt-1 text-sm text-slate-500">快速查看记录概况与最近事件</p>
+              <div className="inline-flex items-center rounded-full bg-slate-900 px-3 py-1 text-xs font-medium text-white">
+                概览
+              </div>
+              <h2 className="mt-3 text-2xl font-bold tracking-tight text-slate-900">最新检查与事件摘要</h2>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
+                把关键检查结果、异常提醒和重要事件放在同一屏里，方便你在手机上快速回看。
+              </p>
             </div>
-            <button
-              onClick={onRefresh}
-              disabled={isRefreshing}
-              className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <RefreshCw size={16} className={isRefreshing ? 'animate-spin' : ''} />
-              {isRefreshing ? '刷新中...' : '刷新'}
-            </button>
+            <div className="flex items-center gap-2 self-start">
+              <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-500 shadow-sm">
+                v{__APP_VERSION__}
+              </span>
+              <PageRefreshButton onClick={onRefresh} isRefreshing={isRefreshing} />
+            </div>
           </div>
 
-          <div className="flex flex-col items-center justify-center h-56 rounded-2xl border border-dashed border-slate-200 bg-slate-50 text-center">
-            <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-blue-50">
-              <AlertCircle className="text-blue-500" size={32} />
+          <div className="mt-6 flex h-64 flex-col items-center justify-center rounded-[24px] border border-dashed border-slate-200 bg-white/80 px-6 text-center shadow-sm">
+            <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-blue-50 text-blue-500">
+              <AlertCircle size={32} />
             </div>
             <h3 className="text-lg font-semibold text-slate-800">暂无数据</h3>
-            <p className="mt-1 text-slate-500">请先录入或上传您的化验单数据。</p>
+            <p className="mt-2 max-w-sm text-sm leading-6 text-slate-500">请先录入或上传化验单数据，概览页会自动汇总最近检查结果与事件时间点。</p>
           </div>
-
-          <div className="mt-4 text-right text-xs text-slate-400">当前版本：{__APP_VERSION__}</div>
-        </div>
+        </section>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-6">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
+    <div className="space-y-5">
+      <section className="overflow-hidden rounded-[28px] border border-slate-200 bg-gradient-to-br from-white via-white to-blue-50/70 p-5 shadow-sm md:p-6">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <h2 className="text-xl font-bold text-slate-800">概览</h2>
-            <p className="mt-1 text-sm text-slate-500">汇总最近一次检查变化与事件标记</p>
+            <div className="inline-flex items-center rounded-full bg-slate-900 px-3 py-1 text-xs font-medium text-white">
+              概览
+            </div>
+            <h2 className="mt-3 text-2xl font-bold tracking-tight text-slate-900">最新检查与事件摘要</h2>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
+              回到更直观的结果卡片视图，同时保留变化摘要和事件标记，手机上一眼就能看到重点。
+            </p>
           </div>
-          <button
-            onClick={onRefresh}
-            disabled={isRefreshing}
-            className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            <RefreshCw size={16} className={isRefreshing ? 'animate-spin' : ''} />
-            {isRefreshing ? '刷新中...' : '刷新'}
-          </button>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-          <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-            <p className="text-sm text-slate-500">总记录数</p>
-            <p className="mt-2 text-2xl font-bold text-slate-800">{records.length}</p>
-          </div>
-          <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-            <p className="text-sm text-slate-500">最近检查日期</p>
-            <p className="mt-2 text-lg font-bold text-slate-800">{format(parseISO(latestRecord.date), 'yyyy-MM-dd')}</p>
-          </div>
-          <div className="rounded-2xl border border-rose-100 bg-rose-50 p-4">
-            <p className="text-sm text-rose-600">最近异常项</p>
-            <p className="mt-2 text-2xl font-bold text-rose-600">{abnormalItems.length}</p>
-          </div>
-          <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4">
-            <p className="text-sm text-blue-600">最近事件</p>
-            <p className="mt-2 line-clamp-2 text-sm font-medium text-blue-700">{recentEventSummary}</p>
+          <div className="flex items-center gap-2 self-start">
+            <span className="inline-flex items-center rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-500 shadow-sm">
+              v{__APP_VERSION__}
+            </span>
+            <PageRefreshButton onClick={onRefresh} isRefreshing={isRefreshing} />
           </div>
         </div>
 
-        <div className="mt-6 grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
-          <section className="rounded-2xl border border-slate-100 p-4 sm:p-5">
-            <div className="flex items-center justify-between gap-3 mb-4">
+        <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="rounded-[24px] border border-slate-200 bg-white/85 p-4 shadow-sm backdrop-blur">
+            <div className="text-sm text-slate-500">总记录数</div>
+            <div className="mt-3 text-3xl font-bold tracking-tight text-slate-900">{records.length}</div>
+            <div className="mt-1 text-xs text-slate-400">已按时间倒序整理</div>
+          </div>
+          <div className="rounded-[24px] border border-slate-200 bg-white/85 p-4 shadow-sm backdrop-blur">
+            <div className="text-sm text-slate-500">最近检查日期</div>
+            <div className="mt-3 text-xl font-bold tracking-tight text-slate-900">{format(parseISO(latestRecord.date), 'yyyy-MM-dd')}</div>
+            <div className="mt-1 text-xs text-slate-400">最新一条化验记录</div>
+          </div>
+          <div className="rounded-[24px] border border-rose-200 bg-rose-50/90 p-4 shadow-sm">
+            <div className="text-sm text-rose-600">最近异常项</div>
+            <div className="mt-3 text-3xl font-bold tracking-tight text-rose-600">{abnormalItems.length}</div>
+            <div className="mt-1 text-xs text-rose-500">默认列表指标中的异常数量</div>
+          </div>
+          <div className="rounded-[24px] border border-amber-200 bg-amber-50/90 p-4 shadow-sm">
+            <div className="text-sm text-amber-700">近 14 天事件</div>
+            <div className="mt-3 text-3xl font-bold tracking-tight text-amber-700">{recentMarkerCount}</div>
+            <div className="mt-1 line-clamp-2 text-xs leading-5 text-amber-600">{recentEventSummary}</div>
+          </div>
+        </div>
+
+        <div className="mt-6 grid gap-5 lg:grid-cols-[1.15fr_0.85fr]">
+          <section className="rounded-[26px] border border-slate-200 bg-white/90 p-4 shadow-sm backdrop-blur sm:p-5">
+            <div className="flex flex-col gap-3 border-b border-slate-100 pb-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <h3 className="font-semibold text-slate-800">最近一次检查摘要</h3>
-                <p className="mt-1 text-sm text-slate-500">异常项目与上次相比变化最大的指标</p>
+                <h3 className="text-lg font-semibold text-slate-900">最新检查结果</h3>
+                <p className="mt-1 text-sm text-slate-500">延续原来更直观的结果卡片展示方式。</p>
               </div>
-              <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-500">
+              <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-500">
                 <CalendarDays size={14} />
                 {format(parseISO(latestRecord.date), 'MM-dd')}
               </span>
             </div>
 
-            <div className="space-y-4">
-              <div>
-                <p className="mb-2 text-sm font-medium text-slate-700">异常项目</p>
-                {abnormalItems.length ? (
-                  <div className="flex flex-wrap gap-2">
-                    {abnormalItems.map(({ indicator, value }) => (
-                      <div
-                        key={indicator.id}
-                        className="rounded-xl border border-rose-100 bg-rose-50 px-3 py-2 text-sm text-rose-700"
-                      >
-                        <div className="font-medium">{indicator.shortName || indicator.name}</div>
-                        <div className="mt-1 text-xs text-rose-600">
-                          {value} {indicator.unit} · 正常 {formatIndicatorRange(indicator)}
-                        </div>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {latestValueItems.map(({ indicator, value, abnormal }) => (
+                <div
+                  key={indicator.id}
+                  className={`rounded-2xl border px-4 py-4 shadow-sm transition ${
+                    abnormal ? 'border-rose-200 bg-rose-50/90' : 'border-slate-200 bg-white'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-medium text-slate-700" title={indicator.name}>
+                        {indicator.shortName || indicator.name}
                       </div>
-                    ))}
+                      <div className="mt-1 text-xs text-slate-400">正常 {formatIndicatorRange(indicator)}</div>
+                    </div>
+                    <span
+                      className={`shrink-0 rounded-full px-2 py-1 text-[11px] font-medium ${
+                        abnormal ? 'bg-rose-100 text-rose-700' : 'bg-emerald-50 text-emerald-700'
+                      }`}
+                    >
+                      {abnormal ? '异常' : '正常'}
+                    </span>
                   </div>
-                ) : (
-                  <div className="flex items-center gap-2 rounded-xl border border-emerald-100 bg-emerald-50 px-3 py-3 text-sm text-emerald-700">
-                    <CheckCircle2 size={16} />
-                    最近一次记录中，默认列表指标均在正常范围内。
+                  <div className="mt-4 flex items-end gap-2">
+                    <span className={`text-3xl font-bold tracking-tight ${abnormal ? 'text-rose-700' : 'text-slate-900'}`}>
+                      {value}
+                    </span>
+                    <span className="pb-1 text-xs text-slate-400">{indicator.unit}</span>
                   </div>
-                )}
-              </div>
-
-              <div>
-                <p className="mb-2 text-sm font-medium text-slate-700">相较上次的主要变化</p>
-                {latestChanges.length ? (
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    {latestChanges.map(item => {
-                      const Icon = getChangeIcon(item.direction);
-                      return (
-                        <div
-                          key={item.indicator.id}
-                          className={`rounded-xl border px-3 py-3 text-sm ${getChangeTone(item.direction)}`}
-                        >
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="font-medium">{item.indicator.shortName || item.indicator.name}</span>
-                            <span className="inline-flex items-center gap-1 text-xs font-medium">
-                              <Icon size={14} />
-                              {item.delta > 0 ? '+' : ''}{item.delta}
-                            </span>
-                          </div>
-                          <div className="mt-1 text-xs opacity-80">
-                            {item.previousValue} → {item.latestValue} {item.indicator.unit}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                ) : (
-                  <div className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-3 text-sm text-slate-500">
-                    {previousRecord ? '与上一条记录相比，暂无可对比的明显数值变化。' : '只有一条记录，暂时无法与上次检查比较。'}
-                  </div>
-                )}
-              </div>
+                </div>
+              ))}
             </div>
           </section>
 
-          <section className="rounded-2xl border border-slate-100 p-4 sm:p-5">
-            <div className="mb-4">
-              <h3 className="font-semibold text-slate-800">最近事件标记</h3>
-              <p className="mt-1 text-sm text-slate-500">便于结合治疗、感染或用药时间点查看趋势</p>
+          <section className="rounded-[26px] border border-slate-200 bg-slate-950 p-4 text-white shadow-sm sm:p-5">
+            <div className="flex items-start justify-between gap-3 border-b border-white/10 pb-4">
+              <div>
+                <h3 className="text-lg font-semibold">最近事件标记</h3>
+                <p className="mt-1 text-sm text-slate-300">把用药、发热、复查等背景和趋势一起看。</p>
+              </div>
+              <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-slate-300">
+                {markers.length} 条
+              </span>
             </div>
 
             {recentMarkers.length ? (
-              <div className="space-y-3">
+              <div className="mt-4 space-y-3">
                 {recentMarkers.map(marker => (
-                  <div key={marker.id} className="rounded-xl border border-slate-100 bg-slate-50 px-3 py-3">
+                  <div key={marker.id} className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <p className="font-medium text-slate-800">{marker.title}</p>
+                        <div className="font-medium text-white">{marker.title}</div>
                         {marker.notes ? (
-                          <p className="mt-1 line-clamp-2 text-sm text-slate-500">{marker.notes}</p>
-                        ) : null}
+                          <div className="mt-1 line-clamp-2 text-sm leading-6 text-slate-300">{marker.notes}</div>
+                        ) : (
+                          <div className="mt-1 text-sm text-slate-400">未填写备注</div>
+                        )}
                       </div>
-                      <span className="shrink-0 rounded-full bg-white px-2.5 py-1 text-xs text-slate-500 border border-slate-200">
+                      <span className="shrink-0 rounded-full bg-white/10 px-2.5 py-1 text-xs text-slate-200">
                         {marker.date}
                       </span>
                     </div>
@@ -296,14 +316,79 @@ export function Dashboard({ records, indicators, markers, onRefresh, isRefreshin
                 ))}
               </div>
             ) : (
-              <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-3 py-6 text-center text-sm text-slate-500">
-                暂无事件标记，可在新增记录页补充用药、发热、复查等时间点。
+              <div className="mt-4 rounded-2xl border border-dashed border-white/15 bg-white/5 px-4 py-8 text-center text-sm text-slate-300">
+                暂无事件标记，可在录入页添加用药、感染、复查等时间点。
               </div>
             )}
           </section>
         </div>
+      </section>
 
-        <div className="mt-4 text-right text-xs text-slate-400">当前版本：{__APP_VERSION__}</div>
+      <div className="grid gap-5 lg:grid-cols-[0.95fr_1.05fr]">
+        <section className="rounded-[26px] border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+          <div className="border-b border-slate-100 pb-4">
+            <h3 className="text-lg font-semibold text-slate-900">异常项目摘要</h3>
+            <p className="mt-1 text-sm text-slate-500">优先提醒最近一次检查中超出正常范围的指标。</p>
+          </div>
+
+          <div className="mt-4">
+            {abnormalItems.length ? (
+              <div className="flex flex-wrap gap-2">
+                {abnormalItems.map(({ indicator, value }) => (
+                  <div key={indicator.id} className="rounded-2xl border border-rose-200 bg-rose-50 px-3 py-3 text-sm text-rose-700 shadow-sm">
+                    <div className="font-medium text-rose-700">{indicator.shortName || indicator.name}</div>
+                    <div className="mt-1 text-xs text-rose-600">
+                      {value} {indicator.unit} · 正常 {formatIndicatorRange(indicator)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-4 text-sm text-emerald-700">
+                <CheckCircle2 size={18} />
+                最近一次记录中，默认列表指标均在正常范围内。
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section className="rounded-[26px] border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+          <div className="border-b border-slate-100 pb-4">
+            <h3 className="text-lg font-semibold text-slate-900">相较上次的主要变化</h3>
+            <p className="mt-1 text-sm text-slate-500">按变化绝对值排序，优先展示最值得关注的波动。</p>
+          </div>
+
+          <div className="mt-4">
+            {latestChanges.length ? (
+              <div className="grid gap-3 sm:grid-cols-2">
+                {latestChanges.map(item => {
+                  const Icon = getChangeIcon(item.direction);
+                  return (
+                    <div key={item.indicator.id} className={`rounded-2xl border px-4 py-4 shadow-sm ${getChangeTone(item.direction)}`}>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="font-medium">{item.indicator.shortName || item.indicator.name}</div>
+                          <div className="mt-1 text-xs opacity-80">
+                            {item.previousValue} → {item.latestValue} {item.indicator.unit}
+                          </div>
+                        </div>
+                        <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-white/70 px-2.5 py-1 text-xs font-semibold">
+                          <Icon size={14} />
+                          {item.delta > 0 ? '+' : ''}
+                          {item.delta}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-500">
+                {previousRecord ? '与上一条记录相比，暂无可对比的明显数值变化。' : '只有一条记录，暂时无法与上次检查比较。'}
+              </div>
+            )}
+          </div>
+        </section>
       </div>
     </div>
   );

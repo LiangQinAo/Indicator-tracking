@@ -26,6 +26,8 @@ export default function App() {
     resetIndicators,
     reorderIndicators,
     addEventMarker,
+    updateEventMarker,
+    deleteEventMarker,
   } = useAppStore();
 
   if (!isLoaded) {
@@ -50,6 +52,8 @@ export default function App() {
         onUpdate={updateRecord}
         onAddIndicator={addIndicator}
         onAddMarker={addEventMarker}
+        onUpdateMarker={updateEventMarker}
+        onDeleteMarker={deleteEventMarker}
       />
     );
   };

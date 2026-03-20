@@ -23,7 +23,7 @@ export function Layout({ children }: LayoutProps) {
   const activePath = location.pathname === '/dashboard' ? '/' : location.pathname;
 
   return (
-    <div className="flex h-[100dvh] bg-slate-50 text-slate-900">
+    <div className="flex min-h-[100dvh] flex-col bg-slate-50 text-slate-900 md:h-[100dvh] md:flex-row">
       {/* Desktop Sidebar */}
       <aside className="hidden md:flex flex-col w-64 bg-white border-r border-slate-200">
         <div className="p-6">
@@ -55,14 +55,14 @@ export function Layout({ children }: LayoutProps) {
       </aside>
 
       {/* Main Content */}
-      <main className="flex min-h-0 flex-1 flex-col overflow-y-auto pb-[calc(env(safe-area-inset-bottom)+5rem)] md:pb-0">
-        <div className="mx-auto flex min-h-0 w-full max-w-5xl flex-1 flex-col p-4 md:p-8">
+      <main className="flex min-h-0 flex-1 flex-col overflow-y-auto pb-[calc(env(safe-area-inset-bottom)+6.5rem)] md:pb-0">
+        <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col p-4 md:min-h-0 md:p-8">
           {/* Mobile Header */}
           <header className="mb-6 flex shrink-0 items-center gap-2 md:hidden">
             <LineChart className="text-blue-600" />
             <h1 className="text-xl font-bold text-slate-800">指标追踪</h1>
           </header>
-          <div className="flex min-h-0 flex-1 flex-col">
+          <div className="flex flex-1 flex-col md:min-h-0">
             {children}
           </div>
         </div>

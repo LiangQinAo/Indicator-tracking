@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Indicator, MedicalRecord, EventMarker } from '../types';
-import { Edit2, Trash2, Check, X, RefreshCw } from 'lucide-react';
+import { Edit2, Trash2, Check, X } from 'lucide-react';
+import { PageRefreshButton } from './PageRefreshButton';
 
 interface RecordHistoryProps {
   records: MedicalRecord[];
@@ -100,14 +101,7 @@ export function RecordHistory({ records, indicators, markers, onRefresh, isRefre
             <h2 className="text-xl font-bold text-slate-800">历史记录</h2>
             <p className="mt-1 text-sm text-slate-500">按时间查看指标明细与事件标记</p>
           </div>
-          <button
-            onClick={onRefresh}
-            disabled={isRefreshing}
-            className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            <RefreshCw size={16} className={isRefreshing ? 'animate-spin' : ''} />
-            {isRefreshing ? '刷新中...' : '刷新'}
-          </button>
+          <PageRefreshButton onClick={onRefresh} isRefreshing={isRefreshing} />
         </div>
 
         <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-12 text-center">
@@ -118,7 +112,7 @@ export function RecordHistory({ records, indicators, markers, onRefresh, isRefre
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col space-y-4 overflow-hidden">
+    <div className="flex flex-1 flex-col space-y-4 md:min-h-0 md:overflow-hidden">
       <div className="flex shrink-0 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h2 className="text-xl font-bold text-slate-800">历史记录</h2>
@@ -145,23 +139,16 @@ export function RecordHistory({ records, indicators, markers, onRefresh, isRefre
             </button>
           </div>
 
-          <button
-            onClick={onRefresh}
-            disabled={isRefreshing}
-            className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            <RefreshCw size={16} className={isRefreshing ? 'animate-spin' : ''} />
-            {isRefreshing ? '刷新中...' : '刷新'}
-          </button>
+          <PageRefreshButton onClick={onRefresh} isRefreshing={isRefreshing} />
         </div>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
+      <div className="flex flex-1 flex-col overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm md:min-h-0">
         <div className="border-b border-slate-100 bg-slate-50/80 px-4 py-3 text-xs text-slate-500 backdrop-blur">
           当前显示 {listIndicators.length} 个指标列。"所有已使用指标" 会包含历史记录中出现过数值的隐藏指标，但不会展开从未使用的停用字段。
         </div>
 
-        <div className="min-h-0 flex-1 overflow-auto overscroll-contain pb-6 md:pb-0">
+        <div className="flex-1 overflow-auto overscroll-contain pb-8 md:min-h-0 md:pb-0">
           <table className="w-full min-w-max border-separate border-spacing-0 text-left text-sm">
             <thead className="font-medium text-slate-600">
               <tr>
