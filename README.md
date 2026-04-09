@@ -16,7 +16,7 @@
 - Express
 - SQLite（`node:sqlite`）
 - Recharts
-- Google GenAI SDK（Gemini）
+- Google GenAI SDK（Gemini + Vertex AI）
 
 **本地运行**
 1. 安装依赖
@@ -28,6 +28,9 @@ npm install
 在项目根目录创建 `.env.local`：
 ```bash
 GEMINI_API_KEY=你的_Gemini_API_Key
+GOOGLE_CLOUD_API_KEY=你的_Vertex_API_Key
+# 可选：Vertex 默认模型，未设置时使用 gemini-2.5-flash
+# VERTEX_MODEL=gemini-2.5-flash
 ```
 
 3. 启动开发服务
@@ -63,7 +66,8 @@ NODE_ENV=production npm run start
 - 页面：`/Users/liangqinao/work/Indicator-tracking/src/components/Settings.tsx` 指标设置
 
 **AI 识别说明**
-- 图片识别使用 Gemini 模型 `gemini-3-flash-preview`（前端直连）。
+- 图片识别支持 Gemini、Vertex、Codex 三种后端引擎，运行时切换通过隐藏页 `/admin` 控制。
+- Gemini 默认模型为 `gemini-3-flash-preview`，Vertex 默认模型为 `gemini-2.5-flash`，都可通过环境变量覆盖。
 - 趋势分析的 AI 面板在 `Dashboard.tsx` 中已注释，如需启用可取消注释并保证 `GEMINI_API_KEY` 可用。
 - 生产环境中不建议将 Key 暴露在前端，建议迁移到服务端代理调用。
 

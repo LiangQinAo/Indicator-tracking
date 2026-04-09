@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 
-type Provider = 'gemini' | 'codex';
+type Provider = 'gemini' | 'vertex' | 'codex';
 
 export function Admin() {
   const [provider, setProvider] = useState<Provider>('gemini');
@@ -12,7 +12,7 @@ export function Admin() {
       const res = await fetch('/api/admin/ai-provider');
       if (res.ok) {
         const data = await res.json();
-        if (data?.provider === 'gemini' || data?.provider === 'codex') {
+        if (data?.provider === 'gemini' || data?.provider === 'vertex' || data?.provider === 'codex') {
           setProvider(data.provider);
         }
       }
@@ -43,7 +43,7 @@ export function Admin() {
         <div className="flex flex-col gap-3">
           <div className="text-sm text-slate-600">当前引擎</div>
           <div className="flex items-center gap-2">
-            {(['gemini', 'codex'] as Provider[]).map((item) => (
+            {(['gemini', 'vertex', 'codex'] as Provider[]).map((item) => (
               <button
                 key={item}
                 onClick={() => setProvider(item)}
@@ -53,7 +53,7 @@ export function Admin() {
                     : 'bg-white border-slate-200 text-slate-600'
                 }`}
               >
-                {item === 'gemini' ? 'Gemini' : 'Codex'}
+                {item === 'gemini' ? 'Gemini' : item === 'vertex' ? 'Vertex' : 'Codex'}
               </button>
             ))}
           </div>

@@ -12,6 +12,8 @@ import { ProxyAgent } from 'undici';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3-flash-preview';
+const VERTEX_MODEL = process.env.VERTEX_MODEL || process.env.GOOGLE_CLOUD_MODEL || 'gemini-2.5-flash';
 
 const setupAiProxy = () => {
   const proxyUrl = process.env.AI_PROXY_URL;
@@ -19,7 +21,7 @@ const setupAiProxy = () => {
   if (typeof globalThis.fetch !== 'function') return;
   const originalFetch = globalThis.fetch.bind(globalThis);
   const proxyAgent = new ProxyAgent(proxyUrl);
-  const proxyHosts = ['generativelanguage.googleapis.com', 'ai.google.dev'];
+  const proxyHosts = ['generativelanguage.googleapis.com', 'ai.google.dev', 'aiplatform.googleapis.com'];
   globalThis.fetch = ((input: any, init?: any) => {
     const url = typeof input === 'string'
       ? input
@@ -590,7 +592,7 @@ async function startServer() {
 
   app.put('/api/admin/ai-provider', (req, res) => {
     const { provider } = req.body as { provider?: string };
-    if (!provider || !['gemini', 'codex'].includes(provider)) {
+    if (!provider || !['gemini', 'vertex', 'codex'].includes(provider)) {
       return res.status(400).json({ error: 'invalid provider' });
     }
     setSetting('ai_provider', provider);
@@ -747,11 +749,12 @@ async function startServer() {
       }
     `;
 
-  const runGeminiRecognition = async (filePath: string, mimeType: string) => {
-    if (!process.env.GEMINI_API_KEY) {
-      throw new Error('GEMINI_API_KEY_MISSING');
-    }
-    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+  const runGenAiRecognition = async (
+    ai: GoogleGenAI,
+    model: string,
+    filePath: string,
+    mimeType: string
+  ) => {
     const base64 = fs.readFileSync(filePath).toString('base64');
     const parts = [{
       inlineData: {
@@ -769,7 +772,7 @@ async function startServer() {
 
     const response = await Promise.race([
       ai.models.generateContent({
-        model: 'gemini-3-flash-preview',
+        model,
         contents: { parts: [...parts, { text: prompt }] },
         config: {
           responseMimeType: 'application/json',
@@ -801,6 +804,40 @@ async function startServer() {
 
     const resultText = response.text || '{}';
     return JSON.parse(resultText);
+  };
+
+  const runGeminiRecognition = async (filePath: string, mimeType: string) => {
+    if (!process.env.GEMINI_API_KEY) {
+      throw new Error('GEMINI_API_KEY_MISSING');
+    }
+    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+    return runGenAiRecognition(ai, GEMINI_MODEL, filePath, mimeType);
+  };
+
+  const runVertexRecognition = async (filePath: string, mimeType: string) => {
+    const apiKey = process.env.VERTEX_API_KEY || process.env.GOOGLE_CLOUD_API_KEY;
+    const project = process.env.VERTEX_PROJECT || process.env.GOOGLE_CLOUD_PROJECT;
+    const location = process.env.VERTEX_LOCATION || process.env.GOOGLE_CLOUD_LOCATION;
+
+    let ai: GoogleGenAI;
+    if (apiKey) {
+      ai = new GoogleGenAI({
+        vertexai: true,
+        apiKey,
+        apiVersion: 'v1'
+      });
+    } else if (project && location) {
+      ai = new GoogleGenAI({
+        vertexai: true,
+        project,
+        location,
+        apiVersion: 'v1'
+      });
+    } else {
+      throw new Error('VERTEX_CONFIG_MISSING');
+    }
+
+    return runGenAiRecognition(ai, VERTEX_MODEL, filePath, mimeType);
   };
 
   const runCodexRecognition = async (filePath: string, mimeType: string) => {
@@ -893,6 +930,9 @@ async function startServer() {
 
   const runAiRecognition = async (filePath: string, mimeType: string) => {
     const provider = getSetting('ai_provider', 'gemini');
+    if (provider === 'vertex') {
+      return runVertexRecognition(filePath, mimeType);
+    }
     if (provider === 'codex') {
       return runCodexRecognition(filePath, mimeType);
     }
@@ -990,6 +1030,8 @@ async function startServer() {
         message = 'Codex Key 未配置';
       } else if (message === 'GEMINI_API_KEY_MISSING') {
         message = 'Gemini Key 未配置';
+      } else if (message === 'VERTEX_CONFIG_MISSING') {
+        message = 'Vertex 配置未完成';
       } else if (message === 'INVALID_JSON_RESPONSE') {
         message = typeof error?.raw === 'string' && error.raw.trim().length > 0 ? error.raw.trim() : 'invalid json response';
       }
