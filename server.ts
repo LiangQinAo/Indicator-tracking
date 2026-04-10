@@ -708,6 +708,22 @@ async function startServer() {
   const AI_MAX_ATTEMPTS = 3;
   const processingJobs = new Set<string>();
 
+  const summarizeAiError = (error: any) => {
+    const message = error?.message || String(error);
+    const cause = error?.cause
+      ? (typeof error.cause === 'string' ? error.cause : JSON.stringify(error.cause))
+      : '';
+    const status = error?.status || error?.code || '';
+    return [message, status, cause].filter(Boolean).join(' | ');
+  };
+
+  const logAiError = (prefix: string, error: any) => {
+    console.log(`${prefix} error=${summarizeAiError(error)}`);
+    if (error?.stack) {
+      console.log(`${prefix} stack=${String(error.stack).slice(0, 2000)}`);
+    }
+  };
+
   const buildAiPrompt = (indicators: { id: string; name: string }[]) => `
       请分析这张医疗化验单图片，提取以下信息：
       1. 检查日期 (YYYY-MM-DD格式)
@@ -750,60 +766,84 @@ async function startServer() {
     `;
 
   const runGenAiRecognition = async (
+    provider: 'gemini' | 'vertex',
     ai: GoogleGenAI,
     model: string,
     filePath: string,
     mimeType: string
   ) => {
+    const logPrefix = `[${provider}]`;
+    const startedAt = Date.now();
+    const resolvedMimeType = mimeType || 'application/octet-stream';
+    const fileName = path.basename(filePath);
+    const fileSize = fs.statSync(filePath).size;
     const base64 = fs.readFileSync(filePath).toString('base64');
     const parts = [{
       inlineData: {
         data: base64,
-        mimeType: mimeType || 'application/octet-stream'
+        mimeType: resolvedMimeType
       }
     }];
 
     const indicators = db.prepare('SELECT id, name FROM indicators').all() as { id: string; name: string }[];
     const prompt = buildAiPrompt(indicators);
+    console.log(
+      `${logPrefix} start file=${fileName} mime=${resolvedMimeType} bytes=${fileSize} model=${model} indicators=${indicators.length} prompt_chars=${prompt.length}`
+    );
 
     const timeoutPromise = new Promise((_, reject) => {
       setTimeout(() => reject(new Error('TIMEOUT')), AI_TIMEOUT_MS);
     });
 
-    const response = await Promise.race([
-      ai.models.generateContent({
-        model,
-        contents: { parts: [...parts, { text: prompt }] },
-        config: {
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              date: { type: Type.STRING, description: "检查日期，格式 YYYY-MM-DD" },
-              items: {
-                type: Type.ARRAY,
+    try {
+      const response = await Promise.race([
+        ai.models.generateContent({
+          model,
+          contents: [{
+            role: 'user',
+            parts: [...parts, { text: prompt }]
+          }],
+          config: {
+            responseMimeType: 'application/json',
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                date: { type: Type.STRING, description: "检查日期，格式 YYYY-MM-DD" },
                 items: {
-                  type: Type.OBJECT,
-                  properties: {
-                    matchedId: { type: Type.STRING, description: "如果匹配到预设指标，填入对应的ID" },
-                    name: { type: Type.STRING, description: "指标名称（简短，如'白细胞'）" },
-                    value: { type: Type.NUMBER, description: "检测数值" },
-                    unit: { type: Type.STRING, description: "单位（简短，如'10^9/L'）" },
-                    minNormal: { type: Type.NUMBER, description: "正常范围下限" },
-                    maxNormal: { type: Type.NUMBER, description: "正常范围上限" }
-                  },
-                  required: ["name", "value"]
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      matchedId: { type: Type.STRING, description: "如果匹配到预设指标，填入对应的ID" },
+                      name: { type: Type.STRING, description: "指标名称（简短，如'白细胞'）" },
+                      value: { type: Type.NUMBER, description: "检测数值" },
+                      unit: { type: Type.STRING, description: "单位（简短，如'10^9/L'）" },
+                      minNormal: { type: Type.NUMBER, description: "正常范围下限" },
+                      maxNormal: { type: Type.NUMBER, description: "正常范围上限" }
+                    },
+                    required: ["name", "value"]
+                  }
                 }
               }
             }
           }
-        }
-      }),
-      timeoutPromise
-    ]) as any;
+        }),
+        timeoutPromise
+      ]) as any;
 
-    const resultText = response.text || '{}';
-    return JSON.parse(resultText);
+      const resultText = response.text || '{}';
+      console.log(
+        `${logPrefix} response_ms=${Date.now() - startedAt} text_chars=${resultText.length} raw=${resultText.slice(0, 500)}`
+      );
+      const parsed = JSON.parse(resultText);
+      console.log(
+        `${logPrefix} parsed date=${parsed?.date || parsed?.checkDate || ''} items=${Array.isArray(parsed?.items) ? parsed.items.length : 0}`
+      );
+      return parsed;
+    } catch (error: any) {
+      logAiError(logPrefix, error);
+      throw error;
+    }
   };
 
   const runGeminiRecognition = async (filePath: string, mimeType: string) => {
@@ -811,7 +851,7 @@ async function startServer() {
       throw new Error('GEMINI_API_KEY_MISSING');
     }
     const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-    return runGenAiRecognition(ai, GEMINI_MODEL, filePath, mimeType);
+    return runGenAiRecognition('gemini', ai, GEMINI_MODEL, filePath, mimeType);
   };
 
   const runVertexRecognition = async (filePath: string, mimeType: string) => {
@@ -837,7 +877,7 @@ async function startServer() {
       throw new Error('VERTEX_CONFIG_MISSING');
     }
 
-    return runGenAiRecognition(ai, VERTEX_MODEL, filePath, mimeType);
+    return runGenAiRecognition('vertex', ai, VERTEX_MODEL, filePath, mimeType);
   };
 
   const runCodexRecognition = async (filePath: string, mimeType: string) => {
@@ -930,6 +970,7 @@ async function startServer() {
 
   const runAiRecognition = async (filePath: string, mimeType: string) => {
     const provider = getSetting('ai_provider', 'gemini');
+    console.log(`[ai] dispatch provider=${provider} file=${path.basename(filePath)} mime=${mimeType || 'application/octet-stream'}`);
     if (provider === 'vertex') {
       return runVertexRecognition(filePath, mimeType);
     }
@@ -944,6 +985,10 @@ async function startServer() {
     processingJobs.add(job.id);
     const attempt = (job.attempts || 0) + 1;
     const now = new Date().toISOString();
+    const provider = getSetting('ai_provider', 'gemini');
+    console.log(
+      `[ai-job] start id=${job.id} attempt=${attempt}/${AI_MAX_ATTEMPTS} provider=${provider} file=${path.basename(job.file_path)} mime=${job.mime || 'application/octet-stream'}`
+    );
     db.prepare('UPDATE ai_jobs SET status = ?, attempts = ?, updated_at = ? WHERE id = ?').run(
       'processing',
       attempt,
@@ -1014,6 +1059,10 @@ async function startServer() {
         ...(mergeRecordId ? { mergeRecordId } : {})
       };
 
+      console.log(
+        `[ai-job] success id=${job.id} provider=${provider} status=${status} date=${extractedDate} values=${Object.keys(newValues).length} newIndicators=${newIndicators.length} mergeRecordId=${mergeRecordId || ''} conflictDiffs=${conflict?.diffs?.length || 0}`
+      );
+
       db.prepare('UPDATE ai_jobs SET status = ?, date = ?, result_json = ?, conflict_json = ?, error = NULL, updated_at = ? WHERE id = ?').run(
         status,
         extractedDate,
@@ -1036,6 +1085,10 @@ async function startServer() {
         message = typeof error?.raw === 'string' && error.raw.trim().length > 0 ? error.raw.trim() : 'invalid json response';
       }
       const failed = attempt >= AI_MAX_ATTEMPTS;
+      console.log(
+        `[ai-job] fail id=${job.id} provider=${provider} failed=${failed} attempt=${attempt}/${AI_MAX_ATTEMPTS} message=${message}`
+      );
+      logAiError('[ai-job]', error);
       db.prepare('UPDATE ai_jobs SET status = ?, error = ?, updated_at = ? WHERE id = ?').run(
         failed ? 'error' : 'pending',
         message,
